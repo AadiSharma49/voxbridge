@@ -4,7 +4,8 @@
   "description": "Live speech translation overlay. Captures system audio, transcribes it locally, and shows translated captions over any app.",
   "main": "electron/main.js",
   "scripts": {
-    "start": "node scripts/start-electron.js"
+    "start": "node scripts/start-electron.js",
+    "test": "node --test \"test/**/*.test.mjs\""
   },
   "keywords": [
     "electron",
@@ -19,5 +20,7 @@
   "devDependencies": {
     "electron": "^30.0.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "onnxruntime-web": "^1.27.0"
+  }
 }

@@ -14,10 +14,14 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
+  // Browsers refuse to evaluate an ES module served as octet-stream, which is
+  // how onnxruntime-web's .mjs bundles would otherwise arrive.
+  '.mjs': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.txt': 'text/plain; charset=utf-8',
   '.wasm': 'application/wasm',
+  '.onnx': 'application/octet-stream',
   '.gz': 'application/gzip'
 };
 
