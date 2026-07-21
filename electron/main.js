@@ -102,6 +102,21 @@ async function createWindow() {
     });
   }
 
+  // The menu bar is hidden, so there is otherwise no way to open DevTools.
+  // Scoped to the focused window rather than a global shortcut.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isToggle =
+      input.type === 'keyDown' &&
+      input.control &&
+      input.shift &&
+      input.key.toUpperCase() === 'I';
+
+    if (isToggle) {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setMenuBarVisibility(false);
