@@ -452,6 +452,12 @@ button {
 
 .icon-button.danger {
   color: var(--danger);
+  border-color: rgba(255, 69, 58, 0.28);
+}
+
+.icon-button.danger:hover {
+  background: rgba(255, 69, 58, 0.16);
+  border-color: rgba(255, 69, 58, 0.55);
 }
 
  .subtitle-stage {

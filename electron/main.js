@@ -8,6 +8,7 @@ const DEFAULT_TRANSLATION_ENDPOINT = 'https://translate.argosopentech.com/transl
 let mainWindow;
 let staticServer;
 let overlayState = 'expanded';
+let isQuitting = false;
 
 // Minimal content types so the local renderer can load HTML, CSS, JS and model files.
 const MIME_TYPES = {
@@ -164,6 +165,23 @@ function sendOverlayCommand(command) {
   }
 }
 
+/**
+ * Quits, falling back to a hard exit if the renderer will not shut down.
+ * Without the fallback a stuck renderer leaves an invisible, frameless,
+ * taskbar-less window the user cannot close by any normal means.
+ */
+function quitApplication() {
+  isQuitting = true;
+
+  const forceExit = setTimeout(() => {
+    console.warn('[Main] Graceful quit timed out, forcing exit');
+    app.exit(0);
+  }, 3000);
+  forceExit.unref?.();
+
+  app.quit();
+}
+
 function registerShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+V', () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -217,8 +235,11 @@ function registerShortcuts() {
   });
 
   // Shortcut to quit the application (Ctrl+Shift+Q / Cmd+Shift+Q).
+  // The window is frameless and skips the taskbar, so this is the escape
+  // hatch when the overlay is hidden or unresponsive.
   globalShortcut.register('CommandOrControl+Shift+Q', () => {
-    app.quit();
+    console.log('[Main] Quit shortcut pressed');
+    quitApplication();
   });
 
   // Shortcut to minimize the overlay window (Ctrl+Shift+N / Cmd+Shift+N).
@@ -237,7 +258,7 @@ function registerShortcuts() {
 }
 
 ipcMain.handle('app:get-version', () => app.getVersion());
-ipcMain.handle('app:quit', () => app.quit());
+ipcMain.handle('app:quit', () => quitApplication());
 ipcMain.handle('window:minimize', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.minimize();
@@ -509,6 +530,16 @@ app.whenReady().then(async () => {
   registerDisplayMediaHandler();
   await createWindow();
   registerShortcuts();
+
+  // globalShortcut.register returns false when another application already
+  // owns the combination. Silent failure here looks like a broken app.
+  const quitShortcut = 'CommandOrControl+Shift+Q';
+  if (!globalShortcut.isRegistered(quitShortcut)) {
+    console.warn(
+      `[Main] ${quitShortcut} could not be registered (another app may own it). ` +
+      'Use the Quit button in the overlay, or Ctrl+Q while it is focused.'
+    );
+  }
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {

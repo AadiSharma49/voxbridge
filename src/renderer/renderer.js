@@ -55,6 +55,7 @@ const ui = {
   expandToggle: document.getElementById('expandToggle'),
   compactToggle: document.getElementById('compactToggle'),
   hideButton: document.getElementById('hideButton'),
+  quitButton: document.getElementById('quitButton'),
   muteButton: document.getElementById('muteButton'),
   languageSummary: document.getElementById('languageSummary'),
   pillStatusText: document.getElementById('pillStatusText')
@@ -434,6 +435,17 @@ async function hideOverlay() {
   }
 }
 
+async function quitApp() {
+  // Release the mic/loopback stream before the process goes away, so the OS
+  // capture indicator does not linger.
+  await appState.audioCapture.stop().catch(() => {});
+  try {
+    await window.desktopApp.quitApp();
+  } catch (error) {
+    console.error('[Renderer] Failed to quit:', error);
+  }
+}
+
 function cycleOverlayMode() {
   const modes = ['expanded', 'compact'];
   const nextIndex = (modes.indexOf(appState.overlayMode) + 1) % modes.length;
@@ -445,6 +457,21 @@ function cycleOverlayMode() {
 // equivalents are registered in electron/main.js and take precedence.
 
 document.addEventListener('keydown', (e) => {
+  // Esc hides the overlay. It is frameless and skips the taskbar, so without
+  // an obvious way out the window can feel stuck.
+  if (e.key === 'Escape' && !e.ctrlKey && !e.shiftKey) {
+    hideOverlay();
+    return;
+  }
+
+  // Ctrl+Q quits, but only while the overlay has focus. Registering it
+  // globally would hijack the shortcut from every other app.
+  if (e.ctrlKey && !e.shiftKey && e.key.toUpperCase() === 'Q') {
+    e.preventDefault();
+    quitApp().catch(console.error);
+    return;
+  }
+
   if (!e.ctrlKey || !e.shiftKey) return;
 
   switch (e.key.toUpperCase()) {
@@ -472,6 +499,7 @@ ui.stopButton?.addEventListener('click', () => stopListening().catch(console.err
 ui.muteButton?.addEventListener('click', () => toggleMute().catch(console.error));
 ui.clearButton?.addEventListener('click', clearHistory);
 ui.hideButton?.addEventListener('click', hideOverlay);
+ui.quitButton?.addEventListener('click', () => quitApp().catch(console.error));
 
 ui.expandToggle?.addEventListener('click', () => {
   setOverlayMode('expanded').catch(console.error);
