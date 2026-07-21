@@ -1,0 +1,23 @@
+{
+  "name": "voxbridge-voicelayer",
+  "version": "0.2.0",
+  "description": "Live speech translation overlay. Captures system audio, transcribes it locally, and shows translated captions over any app.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node scripts/start-electron.js"
+  },
+  "keywords": [
+    "electron",
+    "speech-to-text",
+    "translation",
+    "captions",
+    "offline",
+    "whisper"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^30.0.0"
+  },
+  "dependencies": {}
+}

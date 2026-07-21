@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+release/
+
+# Speech + translation models are downloaded on first run, never committed.
+# Without the directory rule below, `git add .` commits ~613MB of Vosk models.
+assets/models/*/
+assets/models/*.tar.gz
+assets/models/*.bin
+assets/models/*.zip
+
+# Local overrides
+.env
+.env.local
+*.log

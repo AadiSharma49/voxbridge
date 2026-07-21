@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'"
+    />
+    <title>VoxBridge VoiceLayer</title>
+    <link rel="stylesheet" href="/src/renderer/styles.css" />
+  </head>
+  <body>
+    <main id="overlayRoot" class="overlay-shell is-expanded">
+      <!-- Top floating control bar removed as per request -->
+
+      <section class="assistant-workspace" aria-label="VoxBridge VoiceLayer assistant">
+        <button id="compactPill" class="compact-pill" type="button" aria-label="Expand VoxBridge">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="pill-copy">
+            <strong>VoxBridge</strong>
+            <small id="pillStatusText">Ready</small>
+          </span>
+          <span id="micBadge" class="mic-badge">Off</span>
+        </button>
+
+        <div class="workspace-panel">
+<aside class="assistant-sidebar">
+          <div class="brand-lockup">
+            <span class="brand-mark large" aria-hidden="true"></span>
+            <div>
+              <p class="eyebrow">VoxBridge</p>
+              <h1>VoiceLayer</h1>
+            </div>
+          </div>
+
+          <div class="sidebar-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Idle</span>
+            <span class="status-sep">·</span>
+            <span id="modelText">Not loaded</span>
+          </div>
+
+          <div class="sidebar-divider"></div>
+
+          <div class="sidebar-actions">
+            <button id="startButton" class="sidebar-btn primary-btn" type="button">Start Listening</button>
+            <button id="stopButton" class="sidebar-btn secondary-btn" type="button" disabled>Stop</button>
+            <button id="clearButton" class="sidebar-btn ghost-btn" type="button">Clear All</button>
+          </div>
+        </aside>
+
+          <section class="workspace-main">
+            <header class="top-control-bar">
+              <div class="language-controls" aria-label="Language settings">
+                <label class="select-field" for="audioSourceSelect">
+                  <span>Listen to</span>
+                  <select id="audioSourceSelect">
+                    <option value="system" selected>System audio (them)</option>
+                    <option value="mic">Microphone (me)</option>
+                  </select>
+                </label>
+
+                <label class="select-field" for="sourceLanguageSelect">
+                  <span>From</span>
+                  <select id="sourceLanguageSelect">
+                    <option value="en" selected>English</option>
+                    <option value="hi">Hindi</option>
+                    <option value="de">German</option>
+                    <option value="fr">French</option>
+                    <option value="zh">Chinese</option>
+                  </select>
+                </label>
+
+                <label class="select-field" for="targetLanguageSelect">
+                  <span>To</span>
+                  <select id="targetLanguageSelect">
+                    <option value="hi" selected>Hindi</option>
+                    <option value="en">English</option>
+                    <option value="de">German</option>
+                    <option value="fr">French</option>
+                    <option value="zh">Chinese</option>
+                  </select>
+                </label>
+              </div>
+
+                <div class="window-controls">
+                  <button id="muteButton" class="icon-button" type="button">Mute</button>
+                  <button id="expandToggle" class="icon-button is-active" type="button">Full</button>
+                  <button id="compactToggle" class="icon-button" type="button">Mini</button>
+                  <button id="hideButton" class="icon-button danger" type="button">Hide</button>
+                </div>
+            </header>
+
+            <!-- Shown when the platform cannot capture system audio directly. -->
+            <p id="audioNotice" class="audio-notice" role="status" hidden></p>
+
+            <!-- Live subtitle area (updates continuously) -->
+            <section class="subtitle-stage" aria-label="Live subtitles">
+              <div class="live-original" id="liveOriginal">Waiting for speech...</div>
+              <div class="live-translation" id="liveTranslation">Ready for translated speech.</div>
+            </section>
+            <!-- Placeholder AI panel for future suggestions -->
+            <section class="ai-panel" aria-label="AI suggestions" style="margin-top:12px; padding:12px; border:1px solid rgba(255,255,255,0.1); border-radius:12px; background:rgba(0,0,0,0.2);">
+              <p style="margin:0; color:var(--muted); text-align:center;">AI panel placeholder</p>
+            </section>
+
+            <!-- History conversation area (finalized messages) -->
+            <div class="content-grid">
+              <article class="transcript-panel">
+                <div class="section-title">
+                  <span>Conversation History</span>
+                  <span id="languageSummary">English to Hindi</span>
+                </div>
+                <div class="history-columns">
+                  <div class="history-original" id="historyOriginal"></div>
+                  <div class="history-translation" id="historyTranslation"></div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/renderer/renderer.js"></script>
+  </body>
+</html>
