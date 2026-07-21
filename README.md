@@ -78,6 +78,8 @@ video track is requested and immediately discarded.
 
 ## Shortcuts
 
+Global (work from any app):
+
 | Shortcut | Action |
 |---|---|
 | `Ctrl/Cmd+Shift+M` | Start / stop capture |
@@ -85,7 +87,19 @@ video track is requested and immediately discarded.
 | `Ctrl/Cmd+Shift+C` | Toggle compact mode |
 | `Ctrl/Cmd+Shift+V` | Show / hide overlay |
 | `Ctrl/Cmd+Enter` | Show / hide overlay (recreates window if closed) |
-| `Ctrl/Cmd+Shift+Q` | Quit |
+| `Ctrl/Cmd+Shift+Q` | **Quit** |
+
+While the overlay has focus:
+
+| Shortcut | Action |
+|---|---|
+| `Esc` | Hide overlay |
+| `Ctrl/Cmd+Q` | Quit |
+| `Ctrl/Cmd+Shift+I` | Toggle DevTools |
+
+The overlay is frameless and hidden from the taskbar, so use the **Quit**
+button or `Ctrl+Shift+Q` to close it. (`Ctrl+Esc` is not used — Windows
+reserves it for the Start menu.)
 
 ## Roadmap
 
