@@ -19,10 +19,12 @@ export const DEFAULT_VAD_OPTIONS = {
   positiveThreshold: 0.5,
   negativeThreshold: 0.35,
   // Utterances with less voiced content than this are noise (a cough, a click).
-  minSpeechMs: 250,
+  // Kept low enough that a single short word like "hello" still registers.
+  minSpeechMs: 200,
   // Trailing silence that ends an utterance. Too short chops mid-sentence
-  // pauses; too long makes captions lag behind the speaker.
-  silenceMs: 600,
+  // pauses; too long makes captions lag behind the speaker. This is the
+  // single biggest contributor to perceived latency.
+  silenceMs: 420,
   // Audio retained before speech onset, so the first phoneme is not clipped.
   preRollMs: 250,
   // Silence kept at the end so the final word is not cut short.

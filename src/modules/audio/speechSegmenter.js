@@ -17,6 +17,23 @@ export class SpeechSegmenter {
     this.pending = new Float32Array(0);
     this.queue = Promise.resolve();
     this.onUtterance = null;
+    this.windowsSeen = 0;
+    this.peakProbability = 0;
+  }
+
+  /**
+   * Reports the highest speech probability seen per ~4s. If audio is arriving
+   * but this stays near zero, the VAD is rejecting it and no amount of waiting
+   * will produce a transcript.
+   */
+  #trackPeak(probability) {
+    this.windowsSeen += 1;
+    this.peakProbability = Math.max(this.peakProbability, probability);
+
+    if (this.windowsSeen % 128 === 0) {
+      console.info(`[VAD] peak speech probability ${this.peakProbability.toFixed(2)}`);
+      this.peakProbability = 0;
+    }
   }
 
   async load() {
@@ -51,7 +68,19 @@ export class SpeechSegmenter {
       offset += VAD_WINDOW_SIZE;
 
       const probability = await this.vad.probability(window);
-      for (const utterance of this.segmenter.accept(window, probability)) {
+      this.#trackPeak(probability);
+
+      const wasInSpeech = this.segmenter.inSpeech;
+      const utterances = this.segmenter.accept(window, probability);
+
+      if (!wasInSpeech && this.segmenter.inSpeech) {
+        console.info(`[VAD] Speech started (p=${probability.toFixed(2)})`);
+      }
+
+      for (const utterance of utterances) {
+        console.info(
+          `[VAD] Utterance ready: ${(utterance.length / 16000).toFixed(1)}s`
+        );
         this.onUtterance?.(utterance);
       }
     }

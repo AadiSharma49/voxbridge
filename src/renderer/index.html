@@ -111,6 +111,16 @@
             <!-- Shown when the platform cannot capture system audio directly. -->
             <p id="audioNotice" class="audio-notice" role="status" hidden></p>
 
+            <!-- Live input level. Distinguishes "nothing is being captured"
+                 from "audio is captured but nobody is speaking". -->
+            <div class="level-row" id="levelRow" hidden>
+              <span class="level-label">Input</span>
+              <div class="level-track" role="meter" aria-label="Input level">
+                <div class="level-fill" id="levelFill"></div>
+              </div>
+              <span class="level-value" id="levelValue">silent</span>
+            </div>
+
             <!-- Live subtitle area (updates continuously) -->
             <section class="subtitle-stage" aria-label="Live subtitles">
               <div class="live-original" id="liveOriginal">Waiting for speech...</div>

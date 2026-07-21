@@ -37,6 +37,10 @@ const TRANSFORMERS_WASM_DIR =
  */
 const MODEL_CANDIDATES = [
   {
+    model: 'onnx-community/whisper-tiny',
+    dtype: { encoder_model: 'q8', decoder_model_merged: 'fp32' }
+  },
+  {
     model: 'onnx-community/whisper-base',
     dtype: { encoder_model: 'q8', decoder_model_merged: 'fp32' }
   },

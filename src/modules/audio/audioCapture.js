@@ -15,6 +15,20 @@
 export const SAMPLE_RATE = 16000;
 const FRAME_SIZE = 4096;
 
+/** Below this RMS a frame is treated as digital silence. */
+const SILENCE_RMS = 0.0008;
+
+/** How often the capture level is reported, in frames (~4s at 16 kHz). */
+const LEVEL_REPORT_INTERVAL = 16;
+
+function computeRms(frame) {
+  let sum = 0;
+  for (let i = 0; i < frame.length; i += 1) {
+    sum += frame[i] * frame[i];
+  }
+  return Math.sqrt(sum / frame.length);
+}
+
 export class AudioCapture {
   constructor() {
     this.stream = null;
@@ -24,6 +38,10 @@ export class AudioCapture {
     this.silenceNode = null;
     this.sourceType = null;
     this.frameCount = 0;
+    this.level = 0;
+    this.silentFrames = 0;
+    /** @type {((level: number) => void) | null} */
+    this.onLevel = null;
   }
 
   get isActive() {
@@ -66,11 +84,22 @@ export class AudioCapture {
     // HTTP server plus a message port for every frame.
     this.processorNode = this.audioContext.createScriptProcessor(FRAME_SIZE, 1, 1);
     this.frameCount = 0;
+    this.level = 0;
+    this.silentFrames = 0;
 
     this.processorNode.onaudioprocess = (event) => {
       this.frameCount += 1;
       // Copy: the underlying buffer is reused by the audio thread between calls.
       const frame = new Float32Array(event.inputBuffer.getChannelData(0));
+
+      this.level = computeRms(frame);
+      if (this.level < SILENCE_RMS) {
+        this.silentFrames += 1;
+      } else {
+        this.silentFrames = 0;
+      }
+
+      this.#reportLevel();
       onAudioFrame(frame);
     };
 
@@ -89,6 +118,39 @@ export class AudioCapture {
       sampleRate: this.audioContext.sampleRate,
       tracks: this.stream.getAudioTracks().map((t) => t.label)
     });
+  }
+
+  /**
+   * Periodically reports the capture level. This is the diagnostic that
+   * distinguishes "no audio is arriving at all" from "audio is arriving but
+   * it is silent" — the two failures look identical from the outside.
+   */
+  #reportLevel() {
+    // The meter updates on every frame so it tracks speech smoothly; the
+    // console is far noisier than useful at that rate, so it lags behind.
+    this.onLevel?.(this.level);
+
+    if (this.frameCount % LEVEL_REPORT_INTERVAL !== 0) {
+      return;
+    }
+
+    const silentSeconds = ((this.silentFrames * FRAME_SIZE) / SAMPLE_RATE).toFixed(1);
+
+    if (this.silentFrames >= LEVEL_REPORT_INTERVAL) {
+      console.warn(
+        `[AudioCapture] ${this.sourceType} silent for ${silentSeconds}s ` +
+        `(rms ${this.level.toFixed(5)}). ` +
+        (this.sourceType === 'system'
+          ? 'System audio captures what your SPEAKERS play, not your microphone. ' +
+            'Play a video, or switch "Listen to" to Microphone.'
+          : 'Check the microphone is not muted at the OS level.')
+      );
+    } else {
+      console.info(
+        `[AudioCapture] ${this.sourceType} level rms=${this.level.toFixed(4)} ` +
+        `frames=${this.frameCount}`
+      );
+    }
   }
 
   async #openSystemAudioStream() {
@@ -182,5 +244,7 @@ export class AudioCapture {
 
     this.sourceType = null;
     this.frameCount = 0;
+    this.level = 0;
+    this.silentFrames = 0;
   }
 }

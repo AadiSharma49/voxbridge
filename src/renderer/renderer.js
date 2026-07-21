@@ -7,6 +7,9 @@
  * - Translation behind the TranslationService interface
  */
 
+// Imported first: patches console so objects are readable in the terminal.
+import '/src/modules/logging/consoleBridge.js';
+
 import { AudioCapture } from '/src/modules/audio/audioCapture.js';
 import { translationService } from '/src/core/TranslationService.js';
 import { WhisperEngine } from '/src/core/WhisperEngine.js';
@@ -51,6 +54,9 @@ const ui = {
   targetLanguageSelect: document.getElementById('targetLanguageSelect'),
   audioSourceSelect: document.getElementById('audioSourceSelect'),
   audioNotice: document.getElementById('audioNotice'),
+  levelRow: document.getElementById('levelRow'),
+  levelFill: document.getElementById('levelFill'),
+  levelValue: document.getElementById('levelValue'),
   compactPill: document.getElementById('compactPill'),
   expandToggle: document.getElementById('expandToggle'),
   compactToggle: document.getElementById('compactToggle'),
@@ -160,6 +166,71 @@ function handleTargetLanguageChange() {
   appState.targetLanguage = ui.targetLanguageSelect.value;
   updateLanguageLabels();
   console.log('[Renderer] Target language changed to:', appState.targetLanguage);
+}
+
+// ============ INPUT LEVEL ============
+
+/** RMS below this is treated as silence. Matches AudioCapture's threshold. */
+const SILENT_RMS = 0.0008;
+
+/** How long the input must stay silent before we explain why. */
+const SILENCE_WARNING_MS = 4000;
+
+let silenceStartedAt = null;
+let silenceWarningShown = false;
+
+function updateLevelMeter(level) {
+  if (!ui.levelFill || !ui.levelValue) return;
+
+  // RMS is tiny for speech, so a linear bar would barely move.
+  const normalized = Math.min(1, Math.sqrt(level / 0.15));
+  ui.levelFill.style.width = `${Math.round(normalized * 100)}%`;
+  ui.levelFill.classList.toggle('is-speech', level >= SILENT_RMS * 8);
+
+  const now = performance.now();
+
+  if (level < SILENT_RMS) {
+    ui.levelValue.textContent = 'silent';
+    silenceStartedAt ??= now;
+
+    if (!silenceWarningShown && now - silenceStartedAt >= SILENCE_WARNING_MS) {
+      silenceWarningShown = true;
+      warnAboutSilence();
+    }
+    return;
+  }
+
+  ui.levelValue.textContent = `${Math.round(normalized * 100)}%`;
+  silenceStartedAt = null;
+
+  if (silenceWarningShown) {
+    silenceWarningShown = false;
+    showAudioNotice('');
+  }
+}
+
+function resetSilenceTracking() {
+  silenceStartedAt = null;
+  silenceWarningShown = false;
+}
+
+/**
+ * The most common setup mistake: speaking into the mic while the app is
+ * capturing system audio. Both produce "nothing happens", so say which.
+ */
+function warnAboutSilence() {
+  if (appState.audioSource === 'system') {
+    showAudioNotice(
+      'No sound is reaching VoxBridge. System audio captures what your ' +
+      'SPEAKERS are playing — not your microphone. Play a video, or switch ' +
+      '"Listen to" to Microphone (me) to caption your own voice.'
+    );
+  } else {
+    showAudioNotice(
+      'No sound is reaching VoxBridge. Check the microphone is not muted ' +
+      'and is selected as the default input device.'
+    );
+  }
 }
 
 // ============ MODEL LOADING ============
@@ -351,6 +422,10 @@ async function startListening() {
       (text) => { handleFinalTranscript(text).catch(console.error); }
     );
 
+    resetSilenceTracking();
+    appState.audioCapture.onLevel = updateLevelMeter;
+    if (ui.levelRow) ui.levelRow.hidden = false;
+
     await appState.audioCapture.start(
       (audioFrame) => { appState.speechEngine.processAudio(audioFrame); },
       { sourceType: appState.audioSource }
@@ -381,6 +456,9 @@ async function stopListening() {
   console.log('[Renderer] Stopping listening...');
   await appState.audioCapture.stop();
   await appState.speechEngine.stop();
+
+  if (ui.levelRow) ui.levelRow.hidden = true;
+  resetSilenceTracking();
 
   appState.isListening = false;
   if (ui.startButton) ui.startButton.disabled = appState.isMuted;
