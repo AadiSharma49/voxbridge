@@ -9,16 +9,17 @@
 
 import { AudioCapture } from '/src/modules/audio/audioCapture.js';
 import { translationService } from '/src/core/TranslationService.js';
-import { NoOpSpeechEngine } from '/src/core/SpeechEngine.js';
+import { WhisperEngine } from '/src/core/WhisperEngine.js';
 
 // ============ CONSTANTS ============
 
-const DEFAULT_SOURCE_LANGUAGE = 'en';
+const DEFAULT_SOURCE_LANGUAGE = 'auto';
 const DEFAULT_TARGET_LANGUAGE = 'hi';
 
 // ============ LANGUAGE CONFIGURATION ============
 
 const LANGUAGES = {
+  auto: { code: 'auto', label: 'Auto-detect' },
   en: { code: 'en', label: 'English' },
   hi: { code: 'hi', label: 'Hindi' },
   de: { code: 'de', label: 'German' },
@@ -70,7 +71,14 @@ const appState = {
   audioSource: 'system',
   audioCapabilities: null,
   audioCapture: new AudioCapture(),
-  speechEngine: new NoOpSpeechEngine(),
+  speechEngine: new WhisperEngine({
+    // 'auto' lets Whisper detect the spoken language, which is the point when
+    // you do not know what the other person speaks. The From selector narrows
+    // it when the user does know.
+    language: 'auto',
+    onProgress: (progress) => reportModelProgress(progress)
+  }),
+  modelReady: false,
   translationCache: new Map(),
   inFlightTranslations: new Map()
 };
@@ -141,6 +149,8 @@ function updateLanguageLabels() {
 
 function handleSourceLanguageChange() {
   appState.sourceLanguage = ui.sourceLanguageSelect.value;
+  // Keep transcription and translation in agreement about the source language.
+  appState.speechEngine.setLanguage?.(appState.sourceLanguage);
   updateLanguageLabels();
   console.log('[Renderer] Source language changed to:', appState.sourceLanguage);
 }
@@ -149,6 +159,43 @@ function handleTargetLanguageChange() {
   appState.targetLanguage = ui.targetLanguageSelect.value;
   updateLanguageLabels();
   console.log('[Renderer] Target language changed to:', appState.targetLanguage);
+}
+
+// ============ MODEL LOADING ============
+
+/**
+ * The speech model is ~80MB on first run. Without visible progress the app
+ * looks frozen, so surface it and keep Start disabled until it is ready.
+ */
+function reportModelProgress(progress) {
+  if (!progress?.total) return;
+
+  const percent = Math.round(progress.percent ?? (progress.loaded / progress.total) * 100);
+  const mb = (progress.total / 1024 / 1024).toFixed(0);
+  setModelStatus(`Downloading ${percent}% (${mb}MB)`);
+}
+
+async function prepareSpeechEngine() {
+  setModelStatus('Loading model...');
+  setStatus('Preparing');
+  if (ui.startButton) ui.startButton.disabled = true;
+
+  try {
+    await appState.speechEngine.init();
+    appState.modelReady = true;
+    setModelStatus('Whisper ready');
+    setStatus('Ready');
+    if (ui.startButton) ui.startButton.disabled = appState.isMuted;
+  } catch (error) {
+    console.error('[Renderer] Speech engine failed to load:', error);
+    appState.modelReady = false;
+    setModelStatus('Model failed');
+    setStatus('Error');
+    showAudioNotice(
+      `Speech model could not load: ${error.message}. ` +
+      'The first run needs internet access to download it.'
+    );
+  }
 }
 
 // ============ AUDIO SOURCE ============
@@ -284,15 +331,20 @@ async function startListening() {
     return;
   }
 
+  if (!appState.modelReady) {
+    showAudioNotice('Speech model is still loading. Give it a moment.');
+    return;
+  }
+
   console.log('[Renderer] Starting listening...');
   if (ui.startButton) ui.startButton.disabled = true;
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = true;
   if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = true;
   setStatus('Listening');
   updateLiveDisplay('Listening for speech...', '');
+  showAudioNotice('');
 
   try {
-    await appState.speechEngine.init();
     await appState.speechEngine.start(
       handlePartialTranscript,
       (text) => { handleFinalTranscript(text).catch(console.error); }
@@ -471,8 +523,8 @@ async function init() {
   console.log('[Renderer] VoxBridge initializing...');
 
   updateLanguageLabels();
-  setStatus('Ready');
-  setModelStatus('No engine');
+  setStatus('Starting');
+  setModelStatus('Loading model...');
   updateLiveDisplay('Waiting for speech...', 'Ready to translate');
   setMicActive(false);
 
@@ -496,6 +548,10 @@ async function init() {
   } catch (error) {
     console.error('[Renderer] Failed to set initial overlay mode:', error);
   }
+
+  // Loaded up front rather than on first Start, so the download happens while
+  // the user is still reading the UI instead of after they ask for captions.
+  await prepareSpeechEngine();
 }
 
 init().catch(console.error);

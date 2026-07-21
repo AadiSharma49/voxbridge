@@ -3,9 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      wasm-unsafe-eval: required to instantiate the Silero and Whisper WASM
+        runtimes. It permits WebAssembly compilation only, not eval().
+      connect-src huggingface.co/hf.co: first-run model download. Models are
+        cached afterwards, so later runs need no network.
+      blob:/worker-src: transformers.js runs inference off the main thread.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'"
+      content="default-src 'self';
+               script-src 'self' 'wasm-unsafe-eval' blob:;
+               worker-src 'self' blob:;
+               style-src 'self' 'unsafe-inline';
+               connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co;
+               img-src 'self' data:;
+               object-src 'none';
+               base-uri 'none'"
     />
     <title>VoxBridge VoiceLayer</title>
     <link rel="stylesheet" href="/src/renderer/styles.css" />
@@ -64,7 +78,8 @@
                 <label class="select-field" for="sourceLanguageSelect">
                   <span>From</span>
                   <select id="sourceLanguageSelect">
-                    <option value="en" selected>English</option>
+                    <option value="auto" selected>Auto-detect</option>
+                    <option value="en">English</option>
                     <option value="hi">Hindi</option>
                     <option value="de">German</option>
                     <option value="fr">French</option>

@@ -10,6 +10,9 @@ assets/models/*.tar.gz
 assets/models/*.bin
 assets/models/*.zip
 
+# Built from node_modules by scripts/build-vendor.js
+src/vendor/
+
 # Local overrides
 .env
 .env.local

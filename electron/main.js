@@ -91,6 +91,16 @@ async function createWindow() {
     mainWindow = null;
   });
 
+  // Forward renderer logs to the terminal. Model loading and transcription all
+  // happen in the renderer, so without this a failure is invisible unless
+  // DevTools happens to be open. Set VOXBRIDGE_QUIET=1 to silence.
+  if (!process.env.VOXBRIDGE_QUIET) {
+    const levels = ['debug', 'info', 'warn', 'error'];
+    mainWindow.webContents.on('console-message', (_event, level, message) => {
+      console.log(`[renderer:${levels[level] || level}] ${message}`);
+    });
+  }
+
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setMenuBarVisibility(false);
