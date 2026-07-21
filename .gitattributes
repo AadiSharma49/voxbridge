@@ -1,0 +1,15 @@
+# Normalize line endings so the repo stays consistent across Windows/macOS/Linux
+# checkouts. Without this, Git rewrites CRLF on every touch and files show as
+# modified when nothing changed.
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.onnx binary
+*.bin  binary
+*.gz   binary
+*.zip  binary
+*.wasm binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.icns binary
