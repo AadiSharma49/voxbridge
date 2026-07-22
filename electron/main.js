@@ -139,14 +139,18 @@ function getOverlayBounds(state) {
   const { workArea } = screen.getPrimaryDisplay();
 
   if (state === 'compact') {
-    const width = 320;
-    const height = 88;
+    // A subtitle bar across the bottom of the screen, where captions belong
+    // and where they cover the least of whatever you are watching. The old
+    // 320x88 corner pill had no room for text, which made the one mode you
+    // would actually use during a call the one mode that showed nothing.
+    const width = Math.round(Math.min(Math.max(workArea.width * 0.62, 640), 1180));
+    const height = 170;
 
     return {
       width,
       height,
-      x: workArea.x + workArea.width - width - 28,
-      y: workArea.y + 92
+      x: workArea.x + Math.round((workArea.width - width) / 2),
+      y: workArea.y + workArea.height - height - 56
     };
   }
 
@@ -174,8 +178,8 @@ function applyOverlayState(state) {
   }
 
   const bounds = getOverlayBounds(state);
-  mainWindow.setResizable(state === 'expanded');
-  mainWindow.setMinimumSize(state === 'expanded' ? 640 : 320, state === 'expanded' ? 460 : 88);
+  mainWindow.setResizable(true);
+  mainWindow.setMinimumSize(state === 'expanded' ? 640 : 420, state === 'expanded' ? 460 : 120);
   mainWindow.setBounds(bounds, true);
   mainWindow.showInactive();
   mainWindow.setAlwaysOnTop(true, 'screen-saver');

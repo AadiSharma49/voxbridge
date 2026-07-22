@@ -158,19 +158,63 @@ button {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Compact mode is a subtitle bar: captions and nothing else. Everything that
+   is not the text itself is chrome you do not want covering the screen while
+   you are trying to follow a conversation. */
 .overlay-shell.is-compact {
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 14px;
+  padding: 0;
 }
 
-.overlay-shell.is-compact .workspace-panel {
+.overlay-shell.is-compact .assistant-workspace,
+.overlay-shell.is-compact .workspace-panel,
+.overlay-shell.is-compact .workspace-main {
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  display: flex;
+}
+
+.overlay-shell.is-compact .assistant-sidebar,
+.overlay-shell.is-compact .top-control-bar,
+.overlay-shell.is-compact .caption-footer,
+.overlay-shell.is-compact .level-row,
+.overlay-shell.is-compact .audio-notice,
+.overlay-shell.is-compact .compact-pill {
   display: none;
 }
 
-.overlay-shell.is-compact .compact-pill {
+.overlay-shell.is-compact .caption-stage {
+  flex: 1;
+  margin: 0;
+  border-radius: 16px;
+  /* Darker than expanded mode: this sits over video, and captions have to
+     stay legible against whatever is behind them. */
+  background: rgba(0, 0, 0, 0.72);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.overlay-shell.is-compact .caption-scroll {
+  padding: 14px 22px;
   display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.overlay-shell.is-compact .caption-primary {
+  font-size: calc(clamp(1.15rem, 1.9vw, 1.6rem) * var(--caption-scale, 1));
+  text-align: center;
+}
+
+.overlay-shell.is-compact .caption-secondary {
+  text-align: center;
+}
+
+/* Only the last couple of lines matter in a bar this size. */
+.overlay-shell.is-compact .caption-line:not(:nth-last-child(-n + 2)) {
+  display: none;
 }
 
 .brand-mark {
@@ -574,7 +618,7 @@ button {
 .caption-primary {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: clamp(1.25rem, 2.1vw, 1.85rem);
+  font-size: calc(clamp(1.25rem, 2.1vw, 1.85rem) * var(--caption-scale, 1));
   line-height: 1.35;
   font-weight: 600;
   transition: opacity 220ms ease;
@@ -584,8 +628,37 @@ button {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--muted);
-  font-size: clamp(0.8rem, 1.1vw, 0.95rem);
+  font-size: calc(clamp(0.8rem, 1.1vw, 0.95rem) * var(--caption-scale, 1));
   line-height: 1.4;
+}
+
+.caption-size {
+  margin-top: 14px;
+}
+
+.caption-size-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.caption-size-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.caption-size-controls span {
+  flex: 1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 /* The line still being spoken: visibly provisional, but not distracting. */

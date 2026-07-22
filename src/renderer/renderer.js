@@ -13,6 +13,7 @@ import '/src/modules/logging/consoleBridge.js';
 import { AudioCapture } from '/src/modules/audio/audioCapture.js';
 import { translationService } from '/src/core/TranslationService.js';
 import { WhisperEngine } from '/src/core/WhisperEngine.js';
+import { loadSettings, saveSettings } from '/src/modules/settings/settings.js';
 
 // ============ CONSTANTS ============
 
@@ -50,6 +51,10 @@ const ui = {
   startButton: document.getElementById('startButton'),
   stopButton: document.getElementById('stopButton'),
   clearButton: document.getElementById('clearButton'),
+  copyButton: document.getElementById('copyButton'),
+  captionSmaller: document.getElementById('captionSmaller'),
+  captionLarger: document.getElementById('captionLarger'),
+  captionScaleValue: document.getElementById('captionScaleValue'),
   sourceLanguageSelect: document.getElementById('sourceLanguageSelect'),
   targetLanguageSelect: document.getElementById('targetLanguageSelect'),
   audioSourceSelect: document.getElementById('audioSourceSelect'),
@@ -69,20 +74,23 @@ const ui = {
 
 // ============ APPLICATION STATE ============
 
+const settings = loadSettings();
+
 const appState = {
   isListening: false,
   isMuted: false,
   overlayMode: 'expanded',
-  sourceLanguage: DEFAULT_SOURCE_LANGUAGE,
-  targetLanguage: DEFAULT_TARGET_LANGUAGE,
-  audioSource: 'system',
+  sourceLanguage: settings.sourceLanguage,
+  targetLanguage: settings.targetLanguage,
+  audioSource: settings.audioSource,
+  captionScale: settings.captionScale,
   audioCapabilities: null,
   audioCapture: new AudioCapture(),
   speechEngine: new WhisperEngine({
     // 'auto' lets Whisper detect the spoken language, which is the point when
     // you do not know what the other person speaks. The From selector narrows
     // it when the user does know.
-    language: 'auto',
+    language: settings.sourceLanguage,
     onProgress: (progress) => reportModelProgress(progress)
   }),
   modelReady: false,
@@ -248,6 +256,48 @@ function clearCaptions() {
   setPlaceholder('Waiting for speech…');
 }
 
+/**
+ * Copies the session as plain text. Without this a conversation is lost the
+ * moment the window closes, which makes the app useless for the obvious
+ * follow-on job of writing up what was said.
+ */
+async function copyTranscript() {
+  const lines = [...ui.captionStream.querySelectorAll('.caption-line')]
+    .filter((line) => !line.classList.contains('is-partial'))
+    .map((line) => {
+      const primary = line.querySelector('.caption-primary')?.textContent?.trim() || '';
+      const secondary = line.querySelector('.caption-secondary');
+      const original = secondary?.hidden ? '' : secondary?.textContent?.trim() || '';
+      return original ? `${primary}\n  (${original})` : primary;
+    })
+    .filter(Boolean);
+
+  if (!lines.length) {
+    flashButton(ui.copyButton, 'Nothing yet');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(lines.join('\n\n'));
+    flashButton(ui.copyButton, `Copied ${lines.length} lines`);
+  } catch (error) {
+    console.error('[Renderer] Copy failed:', error);
+    flashButton(ui.copyButton, 'Copy failed');
+  }
+}
+
+/** Momentary button feedback; a silent copy leaves the user unsure it worked. */
+function flashButton(button, message) {
+  if (!button) return;
+  const original = button.dataset.label || button.textContent;
+  button.dataset.label = original;
+  button.textContent = message;
+  clearTimeout(button.__flashTimer);
+  button.__flashTimer = setTimeout(() => {
+    button.textContent = button.dataset.label;
+  }, 1600);
+}
+
 function updateFollowButton() {
   if (!ui.autoscrollToggle) return;
   ui.autoscrollToggle.textContent = followTail ? 'Following' : 'Paused';
@@ -263,18 +313,42 @@ function updateLanguageLabels() {
   }
 }
 
+function persistSettings() {
+  saveSettings({
+    sourceLanguage: appState.sourceLanguage,
+    targetLanguage: appState.targetLanguage,
+    audioSource: appState.audioSource,
+    captionScale: appState.captionScale
+  });
+}
+
 function handleSourceLanguageChange() {
   appState.sourceLanguage = ui.sourceLanguageSelect.value;
   // Keep transcription and translation in agreement about the source language.
   appState.speechEngine.setLanguage?.(appState.sourceLanguage);
   updateLanguageLabels();
+  persistSettings();
   console.log('[Renderer] Source language changed to:', appState.sourceLanguage);
 }
 
 function handleTargetLanguageChange() {
   appState.targetLanguage = ui.targetLanguageSelect.value;
   updateLanguageLabels();
+  persistSettings();
   console.log('[Renderer] Target language changed to:', appState.targetLanguage);
+}
+
+/** Caption size is a readability setting, so it scales only the caption text. */
+function applyCaptionScale(scale) {
+  appState.captionScale = Math.min(2, Math.max(0.75, scale));
+  document.documentElement.style.setProperty(
+    '--caption-scale',
+    String(appState.captionScale)
+  );
+  if (ui.captionScaleValue) {
+    ui.captionScaleValue.textContent = `${Math.round(appState.captionScale * 100)}%`;
+  }
+  persistSettings();
 }
 
 // ============ INPUT LEVEL ============
@@ -405,6 +479,7 @@ function refreshAudioNotice() {
 function handleAudioSourceChange() {
   appState.audioSource = ui.audioSourceSelect.value;
   refreshAudioNotice();
+  persistSettings();
   console.log('[Renderer] Audio source changed to:', appState.audioSource);
 }
 
@@ -667,6 +742,9 @@ ui.startButton?.addEventListener('click', () => startListening().catch(console.e
 ui.stopButton?.addEventListener('click', () => stopListening().catch(console.error));
 ui.muteButton?.addEventListener('click', () => toggleMute().catch(console.error));
 ui.clearButton?.addEventListener('click', clearHistory);
+ui.copyButton?.addEventListener('click', () => copyTranscript().catch(console.error));
+ui.captionSmaller?.addEventListener('click', () => applyCaptionScale(appState.captionScale - 0.15));
+ui.captionLarger?.addEventListener('click', () => applyCaptionScale(appState.captionScale + 0.15));
 ui.hideButton?.addEventListener('click', hideOverlay);
 ui.quitButton?.addEventListener('click', () => quitApp().catch(console.error));
 
@@ -735,7 +813,15 @@ window.addEventListener('beforeunload', () => {
 async function init() {
   console.log('[Renderer] VoxBridge initializing...');
 
+  // Reflect persisted choices in the controls before anything else, so the UI
+  // never disagrees with the state the app is actually running with.
+  if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.value = appState.sourceLanguage;
+  if (ui.targetLanguageSelect) ui.targetLanguageSelect.value = appState.targetLanguage;
+  if (ui.audioSourceSelect) ui.audioSourceSelect.value = appState.audioSource;
+  applyCaptionScale(appState.captionScale);
+
   updateLanguageLabels();
+  updateFollowButton();
   setStatus('Starting');
   setModelStatus('Loading model...');
   setPlaceholder('Waiting for speech…');
