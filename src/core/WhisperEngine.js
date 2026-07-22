@@ -93,6 +93,15 @@ export class WhisperEngine extends SpeechEngine {
     // concurrently on CPU makes every one of them slower.
     this.transcribeQueue = Promise.resolve();
     this.onProgress = options.onProgress || null;
+
+    // Streaming partials: while someone is still speaking, re-transcribe the
+    // audio so far on an interval so text appears during the sentence instead
+    // of only after it. Whisper is a batch model, so this is the only way to
+    // get live-feeling output from it.
+    this.partialIntervalMs = options.partialIntervalMs ?? 700;
+    this.partialTimer = null;
+    this.busy = false;
+    this.lastPartialSamples = 0;
   }
 
   getState() {
@@ -171,6 +180,43 @@ export class WhisperEngine extends SpeechEngine {
     this.onFinal = onFinal;
     this.segmenter.reset();
     this.state = 'listening';
+    this.lastPartialSamples = 0;
+
+    this.partialTimer = setInterval(() => {
+      this.#tickPartial();
+    }, this.partialIntervalMs);
+  }
+
+  /**
+   * Transcribes the in-progress utterance so text appears mid-sentence.
+   *
+   * Skipped whenever a transcription is already running: partials are
+   * disposable, and queueing them would delay the final result that actually
+   * matters. Also skipped when no new audio has arrived since the last pass.
+   */
+  #tickPartial() {
+    if (this.state !== 'listening' || this.busy) {
+      return;
+    }
+
+    const pending = this.segmenter.peek();
+    if (!pending || pending.length <= this.lastPartialSamples) {
+      return;
+    }
+
+    this.lastPartialSamples = pending.length;
+    this.busy = true;
+
+    this.#runTranscription(pending)
+      .then((text) => {
+        // Only surface a partial if we are still in the same utterance;
+        // otherwise the final result has already replaced it.
+        if (text && this.state === 'listening') {
+          this.onPartial?.(text);
+        }
+      })
+      .catch((error) => console.debug('[WhisperEngine] Partial failed', error.message))
+      .finally(() => { this.busy = false; });
   }
 
   /**
@@ -187,18 +233,43 @@ export class WhisperEngine extends SpeechEngine {
   }
 
   #enqueueTranscription(utterance) {
-    const seconds = (utterance.length / 16000).toFixed(1);
-    this.onPartial?.(`Transcribing ${seconds}s...`);
+    // A new utterance supersedes any partial text on screen.
+    this.lastPartialSamples = 0;
 
     this.transcribeQueue = this.transcribeQueue
-      .then(() => this.#transcribe(utterance))
+      .then(async () => {
+        const startedAt = performance.now();
+        this.busy = true;
+
+        try {
+          const text = await this.#runTranscription(utterance);
+          const elapsed = Math.round(performance.now() - startedAt);
+
+          if (!text) {
+            console.debug('[WhisperEngine] Discarded empty/hallucinated result');
+            this.onPartial?.('');
+            return;
+          }
+
+          console.info('[WhisperEngine] Transcribed', {
+            ms: elapsed,
+            audioSeconds: +(utterance.length / 16000).toFixed(1),
+            text
+          });
+
+          this.onFinal?.(text);
+        } finally {
+          this.busy = false;
+        }
+      })
       .catch((error) => console.error('[WhisperEngine] Transcription failed', error));
   }
 
-  async #transcribe(utterance) {
-    const startedAt = performance.now();
-
-    const options = {
+  /**
+   * @returns {Promise<string>} transcript, or '' if it looks hallucinated
+   */
+  async #runTranscription(audio) {
+    const result = await this.transcriber(audio, {
       task: 'transcribe',
       // Omitting the language lets Whisper detect it, which matters when you
       // do not know what language the other person will speak.
@@ -206,25 +277,10 @@ export class WhisperEngine extends SpeechEngine {
       // Whisper repeats itself when it loses the thread; this bounds the damage.
       no_repeat_ngram_size: 3,
       condition_on_previous_text: false
-    };
-
-    const result = await this.transcriber(utterance, options);
-    const text = (result?.text || '').trim();
-    const elapsed = Math.round(performance.now() - startedAt);
-
-    if (isHallucination(text)) {
-      console.debug('[WhisperEngine] Discarded hallucination:', JSON.stringify(text));
-      this.onPartial?.('');
-      return;
-    }
-
-    console.info('[WhisperEngine] Transcribed', {
-      ms: elapsed,
-      audioSeconds: +(utterance.length / 16000).toFixed(1),
-      text
     });
 
-    this.onFinal?.(text);
+    const text = (result?.text || '').trim();
+    return isHallucination(text) ? '' : text;
   }
 
   setLanguage(language) {
@@ -232,6 +288,11 @@ export class WhisperEngine extends SpeechEngine {
   }
 
   async stop() {
+    if (this.partialTimer) {
+      clearInterval(this.partialTimer);
+      this.partialTimer = null;
+    }
+
     if (this.state !== 'listening') {
       return;
     }

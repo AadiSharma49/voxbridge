@@ -89,6 +89,11 @@ export class SpeechSegmenter {
     this.pending = combined.slice(offset);
   }
 
+  /** @returns {Float32Array|null} audio of the utterance still being spoken */
+  peek() {
+    return this.segmenter.peek();
+  }
+
   /** Waits for queued frames, then emits any in-progress utterance. */
   async flush() {
     await this.queue;

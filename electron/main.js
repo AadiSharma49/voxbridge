@@ -120,7 +120,16 @@ async function createWindow() {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.setContentProtection(true);
+
+  // Content protection hides the window from screen capture and screen sharing.
+  // It is off by default: this is an accessibility tool, and a captioning
+  // overlay that is deliberately invisible to the other party in a call is
+  // indistinguishable from tooling built to deceive them. Opt in explicitly
+  // with VOXBRIDGE_PRIVATE_OVERLAY=1 if you need it for your own privacy.
+  if (process.env.VOXBRIDGE_PRIVATE_OVERLAY === '1') {
+    mainWindow.setContentProtection(true);
+    console.log('[Main] Content protection enabled: window hidden from screen capture');
+  }
 
   await mainWindow.loadURL(`http://${HOST}:${port}`);
 }
@@ -335,6 +344,74 @@ ipcMain.handle('translation:get-languages', async (_, { endpoint } = {}) => {
     };
   }
 });
+/**
+ * Translation runs in the main process, not the renderer.
+ *
+ * Two reasons: the renderer's origin is the internal HTTP server, so a direct
+ * fetch to a translation host is a cross-origin request the provider does not
+ * permit; and keeping network egress here lets the renderer's CSP stay locked
+ * to 'self'.
+ */
+ipcMain.handle('translation:translate', async (_, payload = {}) => {
+  const text = (payload.text || '').trim();
+  const source = payload.source || 'auto';
+  const target = payload.target || 'en';
+
+  if (!text) {
+    return { ok: true, text: '' };
+  }
+
+  if (source === target) {
+    return { ok: true, text, provider: 'passthrough' };
+  }
+
+  const params = new URLSearchParams({
+    client: 'gtx',
+    sl: source,
+    tl: target,
+    dt: 't',
+    q: text
+  });
+
+  try {
+    const response = await fetch(
+      `https://translate.googleapis.com/translate_a/single?${params}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `Translation service returned ${response.status}`,
+        retryable: response.status === 429 || response.status >= 500
+      };
+    }
+
+    const data = await response.json();
+
+    // The response splits long input into sentence chunks. Taking only
+    // data[0][0][0] silently truncates everything after the first sentence.
+    const segments = Array.isArray(data?.[0]) ? data[0] : [];
+    const translated = segments
+      .map((segment) => segment?.[0] || '')
+      .join('')
+      .trim();
+
+    if (!translated) {
+      return { ok: false, error: 'Empty translation result', retryable: false };
+    }
+
+    return { ok: true, text: translated, provider: 'google-gtx' };
+  } catch (error) {
+    const isTimeout = error.name === 'TimeoutError' || error.name === 'AbortError';
+    return {
+      ok: false,
+      error: isTimeout ? 'Translation timed out' : error.message,
+      retryable: true
+    };
+  }
+});
+
 ipcMain.handle('translation:request', async (_, payload = {}) => {
   const endpoint = payload.endpoint || DEFAULT_TRANSLATION_ENDPOINT;
   const requestBody = {

@@ -38,13 +38,18 @@ export class TranslationService {
  * 
  * Uses Google Translate API endpoint for translation.
  */
+/** Bounds cache growth; captions repeat often but the stream is unbounded. */
+const MAX_CACHE_ENTRIES = 500;
+
 export class GoogleTranslateService extends TranslationService {
   constructor() {
     super();
     this.cache = new Map();
     this.inFlight = new Map();
-    this.endpoint = 'https://translate.googleapis.com/translate_a/single';
-    this.supportedLanguages = new Set(['en', 'hi', 'de', 'fr', 'zh', 'es', 'pt', 'ja', 'ko', 'ar']);
+    this.supportedLanguages = new Set([
+      'auto', 'en', 'hi', 'de', 'fr', 'zh', 'es', 'pt', 'ja', 'ko', 'ar'
+    ]);
+    this.lastError = null;
   }
 
   async translate(text, sourceLanguage, targetLanguage) {
@@ -75,48 +80,45 @@ export class GoogleTranslateService extends TranslationService {
 
     try {
       const result = await translationPromise;
-      this.cache.set(cacheKey, result);
-      return result;
+
+      // Only cache real translations; caching a failure would make one blip
+      // permanent for that line.
+      if (result.ok) {
+        if (this.cache.size >= MAX_CACHE_ENTRIES) {
+          this.cache.delete(this.cache.keys().next().value);
+        }
+        this.cache.set(cacheKey, result.text);
+      }
+
+      return result.text;
     } finally {
       this.inFlight.delete(cacheKey);
     }
   }
 
+  /**
+   * Delegates to the main process. The renderer's origin is the internal HTTP
+   * server, so translating from here directly would be a cross-origin request
+   * the provider does not allow.
+   */
   async _performTranslation(text, sourceLanguage, targetLanguage) {
-    try {
-      const params = new URLSearchParams({
-        client: 'gtx',
-        sl: sourceLanguage,
-        tl: targetLanguage,
-        dt: 't',
-        q: text
-      });
+    const response = await window.desktopApp.translate({
+      text,
+      source: sourceLanguage,
+      target: targetLanguage
+    });
 
-      const response = await fetch(`${this.endpoint}?${params}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0'
-        }
-      });
-
-      if (!response.ok) {
-        console.error('[GoogleTranslateService] API error:', response.status);
-        return text;
-      }
-
-      const data = await response.json();
-      const translated = data[0]?.[0]?.[0];
-
-      if (!translated) {
-        console.warn('[GoogleTranslateService] Empty translation result');
-        return text;
-      }
-
-      console.log('[GoogleTranslateService] Translated:', { sourceLanguage, targetLanguage });
-      return translated;
-    } catch (error) {
-      console.error('[GoogleTranslateService] Translation failed:', error);
-      return text;
+    if (response?.ok) {
+      this.lastError = null;
+      return { ok: true, text: response.text };
     }
+
+    this.lastError = response?.error || 'Translation failed';
+    console.warn('[Translation]', this.lastError);
+
+    // Falling back to the original text keeps captions flowing: seeing the
+    // source language beats seeing nothing.
+    return { ok: false, text };
   }
 
   async isSupported(sourceLanguage, targetLanguage) {

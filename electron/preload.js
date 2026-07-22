@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktopApp', {
   getVersion: () => ipcRenderer.invoke('app:get-version'),
   getTranslationLanguages: (payload) => ipcRenderer.invoke('translation:get-languages', payload),
+  translate: (payload) => ipcRenderer.invoke('translation:translate', payload),
   translateText: (payload) => ipcRenderer.invoke('translation:request', payload),
   getAudioCapabilities: () => ipcRenderer.invoke('audio:get-capabilities'),
   checkModelAvailability: (langCode) => ipcRenderer.invoke('models:check-availability', langCode),

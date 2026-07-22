@@ -185,6 +185,45 @@ test('flush during silence emits nothing', () => {
   assert.equal(segmenter.flush().length, 0);
 });
 
+test('peek returns nothing during silence', () => {
+  const segmenter = new VadSegmenter();
+  drive(segmenter, [[0.01, windowsFor(1000)]]);
+
+  assert.equal(segmenter.peek(), null);
+});
+
+test('peek exposes the utterance in progress without ending it', () => {
+  const segmenter = new VadSegmenter();
+  drive(segmenter, [[0.9, windowsFor(800)]]);
+
+  const partial = segmenter.peek();
+  assert.ok(partial instanceof Float32Array);
+  assert.ok(partial.length > 0);
+
+  // Peeking must not consume: the final result still arrives on flush.
+  assert.equal(segmenter.flush().length, 1);
+});
+
+test('peek grows as speech continues', () => {
+  const segmenter = new VadSegmenter();
+
+  drive(segmenter, [[0.9, windowsFor(500)]]);
+  const first = segmenter.peek().length;
+
+  drive(segmenter, [[0.9, windowsFor(500)]]);
+  const second = segmenter.peek().length;
+
+  assert.ok(second > first, `expected growth, got ${first} then ${second}`);
+});
+
+test('peek stays null until there is enough voiced content', () => {
+  // Below the 200ms minimum, so there is nothing worth transcribing yet.
+  const segmenter = new VadSegmenter({ minSpeechMs: 500 });
+  drive(segmenter, [[0.9, windowsFor(100)]]);
+
+  assert.equal(segmenter.peek(), null);
+});
+
 test('reset clears in-progress state', () => {
   const segmenter = new VadSegmenter();
   drive(segmenter, [[0.9, windowsFor(1000)]]);

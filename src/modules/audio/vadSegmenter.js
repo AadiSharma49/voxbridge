@@ -119,6 +119,22 @@ export class VadSegmenter {
     return utterances;
   }
 
+  /**
+   * Returns the utterance in progress without ending it, so a partial
+   * transcript can be shown while the speaker is still talking.
+   *
+   * @returns {Float32Array|null} null when not in speech or too short yet
+   */
+  peek() {
+    if (!this.inSpeech || this.collected.length === 0) {
+      return null;
+    }
+    if (this.speechWindows < this.minSpeechWindows) {
+      return null;
+    }
+    return concatWindows(this.collected);
+  }
+
   /** Ends the stream, emitting any in-progress utterance. */
   flush() {
     if (!this.inSpeech) {
