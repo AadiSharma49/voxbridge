@@ -98,10 +98,23 @@ export class WhisperEngine extends SpeechEngine {
     // audio so far on an interval so text appears during the sentence instead
     // of only after it. Whisper is a batch model, so this is the only way to
     // get live-feeling output from it.
-    this.partialIntervalMs = options.partialIntervalMs ?? 700;
+    this.partialIntervalMs = options.partialIntervalMs ?? 450;
     this.partialTimer = null;
     this.busy = false;
     this.lastPartialSamples = 0;
+  }
+
+  /**
+   * Partials only ever transcribe the most recent slice of audio.
+   *
+   * Without this the cost grows with the length of the sentence: a 10 second
+   * utterance would re-transcribe all 10 seconds every interval, so the
+   * captions get slower the longer someone talks. A rolling window keeps each
+   * partial a fixed cost, and matches how live captions read anyway — the
+   * recent words are the ones still changing.
+   */
+  static get PARTIAL_WINDOW_SAMPLES() {
+    return 16000 * 6;
   }
 
   getState() {
@@ -207,7 +220,11 @@ export class WhisperEngine extends SpeechEngine {
     this.lastPartialSamples = pending.length;
     this.busy = true;
 
-    this.#runTranscription(pending)
+    const window = pending.length > WhisperEngine.PARTIAL_WINDOW_SAMPLES
+      ? pending.slice(-WhisperEngine.PARTIAL_WINDOW_SAMPLES)
+      : pending;
+
+    this.#runTranscription(window)
       .then((text) => {
         // Only surface a partial if we are still in the same utterance;
         // otherwise the final result has already replaced it.

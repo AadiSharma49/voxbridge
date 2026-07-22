@@ -42,10 +42,10 @@ const ui = {
   statusText: document.getElementById('statusText'),
   statusDot: document.getElementById('statusDot'),
   modelText: document.getElementById('modelText'),
-  liveOriginal: document.getElementById('liveOriginal'),
-  liveTranslation: document.getElementById('liveTranslation'),
-  historyOriginal: document.getElementById('historyOriginal'),
-  historyTranslation: document.getElementById('historyTranslation'),
+  captionScroll: document.getElementById('captionScroll'),
+  captionStream: document.getElementById('captionStream'),
+  captionPlaceholder: document.getElementById('captionPlaceholder'),
+  autoscrollToggle: document.getElementById('autoscrollToggle'),
   micBadge: document.getElementById('micBadge'),
   startButton: document.getElementById('startButton'),
   stopButton: document.getElementById('stopButton'),
@@ -136,13 +136,122 @@ async function setOverlayMode(mode) {
   }
 }
 
-function updateLiveDisplay(original, translated) {
-  if (ui.liveOriginal) {
-    ui.liveOriginal.textContent = original || 'Waiting for speech...';
+// ============ CAPTION STREAM ============
+//
+// Captions render as one continuous ribbon rather than discrete records:
+// settled lines flow upward, and the line currently being spoken stays at the
+// bottom, updating in place until it settles.
+
+/** Lines kept in the DOM. Older ones are dropped so the app can run for hours. */
+const MAX_CAPTION_LINES = 200;
+
+/** The in-progress line, or null when nobody is speaking. */
+let partialLine = null;
+
+/** Auto-follow pauses when the user scrolls up to read something. */
+let followTail = true;
+
+function setPlaceholder(text) {
+  if (!ui.captionPlaceholder) return;
+  const hasLines = ui.captionStream?.childElementCount > 0;
+  ui.captionPlaceholder.hidden = hasLines || !text;
+  if (text) ui.captionPlaceholder.textContent = text;
+}
+
+function createCaptionLine({ primary, secondary, isPartial }) {
+  const line = document.createElement('div');
+  line.className = isPartial ? 'caption-line is-partial' : 'caption-line';
+
+  const primaryEl = document.createElement('p');
+  primaryEl.className = 'caption-primary';
+  primaryEl.textContent = primary;
+  line.appendChild(primaryEl);
+
+  const secondaryEl = document.createElement('p');
+  secondaryEl.className = 'caption-secondary';
+  secondaryEl.textContent = secondary || '';
+  secondaryEl.hidden = !secondary;
+  line.appendChild(secondaryEl);
+
+  return line;
+}
+
+function scrollToTail() {
+  if (!followTail || !ui.captionScroll) return;
+  ui.captionScroll.scrollTop = ui.captionScroll.scrollHeight;
+}
+
+function trimCaptionHistory() {
+  while (ui.captionStream.childElementCount > MAX_CAPTION_LINES) {
+    ui.captionStream.removeChild(ui.captionStream.firstElementChild);
   }
-  if (ui.liveTranslation) {
-    ui.liveTranslation.textContent = translated || 'Ready to translate';
+}
+
+/**
+ * Updates the line being spoken, creating it on first sight. Editing in place
+ * rather than appending is what makes the caption read as one evolving line
+ * instead of a stream of near-duplicate fragments.
+ */
+function showPartialCaption(text) {
+  if (!ui.captionStream) return;
+
+  if (!text) {
+    clearPartialCaption();
+    return;
   }
+
+  if (!partialLine) {
+    partialLine = createCaptionLine({ primary: text, isPartial: true });
+    ui.captionStream.appendChild(partialLine);
+  } else {
+    partialLine.querySelector('.caption-primary').textContent = text;
+  }
+
+  setPlaceholder('');
+  scrollToTail();
+}
+
+function clearPartialCaption() {
+  partialLine?.remove();
+  partialLine = null;
+}
+
+/**
+ * Commits a settled line. The translation is the primary text because that is
+ * what the user is here to read; the original sits beneath it for reference.
+ */
+function commitCaption(originalText, translatedText) {
+  if (!ui.captionStream) return;
+
+  clearPartialCaption();
+
+  const sameLanguage = !translatedText || translatedText === originalText;
+  const line = createCaptionLine({
+    primary: translatedText || originalText,
+    secondary: sameLanguage ? '' : originalText,
+    isPartial: false
+  });
+
+  ui.captionStream.appendChild(line);
+  trimCaptionHistory();
+  setPlaceholder('');
+  scrollToTail();
+
+  return line;
+}
+
+function clearCaptions() {
+  if (ui.captionStream) ui.captionStream.innerHTML = '';
+  partialLine = null;
+  followTail = true;
+  updateFollowButton();
+  setPlaceholder('Waiting for speech…');
+}
+
+function updateFollowButton() {
+  if (!ui.autoscrollToggle) return;
+  ui.autoscrollToggle.textContent = followTail ? 'Following' : 'Paused';
+  ui.autoscrollToggle.classList.toggle('is-active', followTail);
 }
 
 // ============ LANGUAGE MANAGEMENT ============
@@ -336,12 +445,10 @@ async function translateText(text, sourceLanguage, targetLanguage) {
 
 // ============ TRANSCRIPT HANDLING ============
 
+/** Partials are shown untranslated: they change every few hundred ms, and
+ *  translating text that is about to be replaced wastes the rate limit. */
 function handlePartialTranscript(text) {
-  const normalizedText = text?.trim() || '';
-  if (!normalizedText) return;
-
-  // Partials update the live line only; they are never translated or stored.
-  updateLiveDisplay(normalizedText, 'Listening...');
+  showPartialCaption(text?.trim() || '');
 }
 
 async function handleFinalTranscript(originalText) {
@@ -350,7 +457,9 @@ async function handleFinalTranscript(originalText) {
 
   console.log('[Renderer] Final transcript:', normalizedText);
 
-  updateLiveDisplay(normalizedText, 'Translating...');
+  // Commit the original immediately so the caption never stalls waiting on the
+  // network, then fill in the translation when it lands.
+  const line = commitCaption(normalizedText, '');
 
   try {
     const translatedText = await translateText(
@@ -359,41 +468,25 @@ async function handleFinalTranscript(originalText) {
       appState.targetLanguage
     );
 
-    updateLiveDisplay(normalizedText, translatedText);
-    addToHistory(normalizedText, translatedText);
+    applyTranslation(line, normalizedText, translatedText);
   } catch (error) {
-    console.error('[Renderer] Failed to handle transcript:', error);
-    updateLiveDisplay(normalizedText, 'Translation error');
+    console.error('[Renderer] Failed to translate transcript:', error);
   }
 }
 
-function addToHistory(originalText, translatedText) {
-  const originalEntry = document.createElement('div');
-  originalEntry.className = 'history-item';
-  const originalP = document.createElement('p');
-  originalP.className = 'history-original';
-  originalP.textContent = originalText;
-  originalEntry.appendChild(originalP);
-  ui.historyOriginal.appendChild(originalEntry);
-
-  const translatedEntry = document.createElement('div');
-  translatedEntry.className = 'history-item';
-  const translatedP = document.createElement('p');
-  translatedP.className = 'history-translation';
-  translatedP.textContent = translatedText;
-  translatedEntry.appendChild(translatedP);
-  ui.historyTranslation.appendChild(translatedEntry);
-
-  scrollHistoryToBottom();
-}
-
-function scrollHistoryToBottom() {
-  for (const column of [ui.historyOriginal, ui.historyTranslation]) {
-    const scroller = column?.parentElement;
-    if (scroller) {
-      scroller.scrollTop = scroller.scrollHeight;
-    }
+/** Promotes the translation to primary once it arrives. */
+function applyTranslation(line, originalText, translatedText) {
+  if (!line || !translatedText || translatedText === originalText) {
+    return;
   }
+
+  line.querySelector('.caption-primary').textContent = translatedText;
+
+  const secondary = line.querySelector('.caption-secondary');
+  secondary.textContent = originalText;
+  secondary.hidden = false;
+
+  scrollToTail();
 }
 
 // ============ SPEECH ENGINE CONTROL ============
@@ -413,7 +506,7 @@ async function startListening() {
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = true;
   if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = true;
   setStatus('Listening');
-  updateLiveDisplay('Listening for speech...', '');
+  setPlaceholder('Listening…');
   showAudioNotice('');
 
   try {
@@ -440,7 +533,7 @@ async function startListening() {
     await appState.audioCapture.stop().catch(() => {});
     await appState.speechEngine.stop().catch(() => {});
     setStatus('Error');
-    updateLiveDisplay('Could not start capture', '');
+    setPlaceholder('Could not start capture.');
     showAudioNotice(error.message);
     if (ui.startButton) ui.startButton.disabled = false;
     if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = false;
@@ -488,19 +581,17 @@ async function toggleMute() {
     await stopListening();
     if (ui.startButton) ui.startButton.disabled = true;
     setStatus('Muted');
-    updateLiveDisplay('Muted', '');
+    setPlaceholder('Muted.');
   } else {
     if (ui.startButton) ui.startButton.disabled = false;
     setStatus('Ready');
-    updateLiveDisplay('Ready to listen', '');
+    setPlaceholder('Ready to listen.');
   }
   setMicActive(appState.isListening);
 }
 
 function clearHistory() {
-  if (ui.historyOriginal) ui.historyOriginal.innerHTML = '';
-  if (ui.historyTranslation) ui.historyTranslation.innerHTML = '';
-  updateLiveDisplay('Ready to listen', '');
+  clearCaptions();
   appState.translationCache.clear();
   appState.inFlightTranslations.clear();
 }
@@ -591,6 +682,22 @@ ui.compactPill?.addEventListener('click', () => {
   setOverlayMode('expanded').catch(console.error);
 });
 
+// Stop auto-following when the user scrolls up to read; resume at the bottom.
+ui.captionScroll?.addEventListener('scroll', () => {
+  const el = ui.captionScroll;
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  if (atBottom !== followTail) {
+    followTail = atBottom;
+    updateFollowButton();
+  }
+});
+
+ui.autoscrollToggle?.addEventListener('click', () => {
+  followTail = !followTail;
+  updateFollowButton();
+  scrollToTail();
+});
+
 ui.sourceLanguageSelect?.addEventListener('change', handleSourceLanguageChange);
 ui.targetLanguageSelect?.addEventListener('change', handleTargetLanguageChange);
 ui.audioSourceSelect?.addEventListener('change', handleAudioSourceChange);
@@ -631,7 +738,7 @@ async function init() {
   updateLanguageLabels();
   setStatus('Starting');
   setModelStatus('Loading model...');
-  updateLiveDisplay('Waiting for speech...', 'Ready to translate');
+  setPlaceholder('Waiting for speech…');
   setMicActive(false);
 
   try {

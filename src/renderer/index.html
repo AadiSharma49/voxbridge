@@ -121,29 +121,22 @@
               <span class="level-value" id="levelValue">silent</span>
             </div>
 
-            <!-- Live subtitle area (updates continuously) -->
-            <section class="subtitle-stage" aria-label="Live subtitles">
-              <div class="live-original" id="liveOriginal">Waiting for speech...</div>
-              <div class="live-translation" id="liveTranslation">Ready for translated speech.</div>
+            <!-- Continuous caption ribbon: settled lines flow upward and the
+                 line currently being spoken stays at the bottom. -->
+            <section class="caption-stage" aria-label="Live captions">
+              <div class="caption-scroll" id="captionScroll">
+                <div class="caption-stream" id="captionStream" aria-live="polite"></div>
+                <p class="caption-placeholder" id="captionPlaceholder">
+                  Waiting for speech&hellip;
+                </p>
+              </div>
+              <div class="caption-footer">
+                <span id="languageSummary">English to Hindi</span>
+                <button id="autoscrollToggle" class="link-button is-active" type="button">
+                  Following
+                </button>
+              </div>
             </section>
-            <!-- Placeholder AI panel for future suggestions -->
-            <section class="ai-panel" aria-label="AI suggestions" style="margin-top:12px; padding:12px; border:1px solid rgba(255,255,255,0.1); border-radius:12px; background:rgba(0,0,0,0.2);">
-              <p style="margin:0; color:var(--muted); text-align:center;">AI panel placeholder</p>
-            </section>
-
-            <!-- History conversation area (finalized messages) -->
-            <div class="content-grid">
-              <article class="transcript-panel">
-                <div class="section-title">
-                  <span>Conversation History</span>
-                  <span id="languageSummary">English to Hindi</span>
-                </div>
-                <div class="history-columns">
-                  <div class="history-original" id="historyOriginal"></div>
-                  <div class="history-translation" id="historyTranslation"></div>
-                </div>
-              </article>
-            </div>
           </section>
         </div>
       </section>

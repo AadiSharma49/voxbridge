@@ -185,6 +185,29 @@ test('flush during silence emits nothing', () => {
   assert.equal(segmenter.flush().length, 0);
 });
 
+test('default silence gate tolerates a natural speaking pause', () => {
+  // Regression guard. Lowering silenceMs to chase latency once dropped it
+  // below a normal mid-sentence pause, which split sentences into fragments
+  // and made the captions read worse despite arriving sooner.
+  const segmenter = new VadSegmenter();
+
+  for (const pauseMs of [200, 300, 400]) {
+    segmenter.reset();
+    const { emitted } = drive(segmenter, [
+      [0.9, windowsFor(700)],
+      [0.01, windowsFor(pauseMs)],
+      [0.9, windowsFor(700)],
+      [0.01, windowsFor(1500)]
+    ]);
+
+    assert.equal(
+      emitted.length,
+      1,
+      `a ${pauseMs}ms pause should not end an utterance, got ${emitted.length} lines`
+    );
+  }
+});
+
 test('peek returns nothing during silence', () => {
   const segmenter = new VadSegmenter();
   drive(segmenter, [[0.01, windowsFor(1000)]]);

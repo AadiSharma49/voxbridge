@@ -21,16 +21,24 @@ export const DEFAULT_VAD_OPTIONS = {
   // Utterances with less voiced content than this are noise (a cough, a click).
   // Kept low enough that a single short word like "hello" still registers.
   minSpeechMs: 200,
-  // Trailing silence that ends an utterance. Too short chops mid-sentence
-  // pauses; too long makes captions lag behind the speaker. This is the
-  // single biggest contributor to perceived latency.
-  silenceMs: 420,
+  // Trailing silence that ends an utterance.
+  //
+  // Natural mid-sentence pauses run 200-400ms, so anything below that splits
+  // sentences mid-thought and the captions read as fragments. Dropping this to
+  // 320ms to "reduce latency" made the output worse, not better.
+  //
+  // Perceived latency is carried by streaming partials instead: text is
+  // already on screen while the speaker talks, so this gate only controls when
+  // a line settles, and it can afford to wait for a real sentence boundary.
+  silenceMs: 450,
   // Audio retained before speech onset, so the first phoneme is not clipped.
   preRollMs: 250,
   // Silence kept at the end so the final word is not cut short.
   postRollMs: 150,
   // A monologue would otherwise never flush. Force a cut and keep going.
-  maxUtteranceMs: 25000
+  // Kept short so a long speaker still produces settled lines regularly
+  // instead of one enormous block at the end.
+  maxUtteranceMs: 12000
 };
 
 export function msToWindows(ms) {

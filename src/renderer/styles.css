@@ -231,8 +231,7 @@ button {
 
 .assistant-sidebar,
 .workspace-main,
-.transcript-panel,
-.subtitle-stage {
+.caption-stage {
   min-width: 0;
 }
 
@@ -505,144 +504,149 @@ button {
   border-color: rgba(255, 69, 58, 0.55);
 }
 
- .subtitle-stage {
-   flex: 0 0 auto;
-   padding: 16px 24px;
-   border: 1px solid rgba(255, 255, 255, 0.12);
-   border-radius: 20px;
-   background:
-     linear-gradient(180deg, rgba(255, 255, 250, 0.08), rgba(255, 255, 250, 0.03)),
-     rgba(0, 0, 0, 0.28);
-   display: flex;
-   flex-direction: column;
-   align-items: center;
- }
+/* ============ CAPTION STREAM ============
+   Captions read as a continuous ribbon, the way live captions do everywhere
+   else: settled lines flow upward, the line being spoken sits at the bottom.
+   The previous two-column transcript table made speech feel like discrete
+   records rather than someone talking. */
 
- .translated-subtitle,
- .original-subtitle {
-   margin: 0;
-   overflow-wrap: anywhere;
-   font-size: clamp(1.4rem, 2vw, 2rem);
-   line-height: 1.4;
-   text-align: center;
-   max-width: 90%;
- }
-
-.translated-subtitle {
-  color: var(--text);
-  font-size: clamp(1.1rem, 1.6vw, 1.5rem);
-  font-weight: 620;
-  line-height: 1.34;
-  max-width: 48rem;
-}
-
-.original-subtitle {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(246, 246, 242, 0.09);
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.hidden {
-  display: none;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0;
-  min-height: 0;
-  flex: 1;
-}
-
-.transcript-panel {
+.caption-stage {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
-  background: rgba(246, 246, 242, 0.052);
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 250, 0.07), rgba(255, 255, 250, 0.02)),
+    rgba(0, 0, 0, 0.3);
+  overflow: hidden;
 }
 
-.section-title {
+.caption-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 26px;
+  scroll-behavior: smooth;
+}
+
+.caption-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.caption-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.caption-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.caption-placeholder {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.caption-placeholder[hidden] {
+  display: none;
+}
+
+.caption-line {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: captionIn 160ms ease-out;
+}
+
+/* Older lines recede so attention stays on what was just said. */
+.caption-line:not(:last-child) .caption-primary {
+  opacity: 0.55;
+}
+
+.caption-primary {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(1.25rem, 2.1vw, 1.85rem);
+  line-height: 1.35;
+  font-weight: 600;
+  transition: opacity 220ms ease;
+}
+
+.caption-secondary {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: clamp(0.8rem, 1.1vw, 0.95rem);
+  line-height: 1.4;
+}
+
+/* The line still being spoken: visibly provisional, but not distracting. */
+.caption-line.is-partial .caption-primary {
+  opacity: 0.82;
+  color: var(--accent);
+}
+
+.caption-line.is-partial .caption-primary::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 4px;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: currentColor;
+  animation: captionCaret 1s steps(2, start) infinite;
+}
+
+.caption-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 9px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
-  flex: 0 0 auto;
+  letter-spacing: 0.04em;
 }
 
-.history-list {
-  min-height: 0;
-  margin-top: 10px;
-  padding-right: 5px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.history-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.history-list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.history-item {
-  margin: 0 0 8px;
-  padding: 16px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
-  background: rgba(0, 0, 0, 0.2);
-}
-
- .history-translation,
- .history-original,
- .history-meta {
-   margin: 0;
-   overflow-wrap: anywhere;
- }
-
- .history-columns {
-   display: flex;
-   gap: 24px;
-   overflow-y: auto;
-   max-height: 40vh;
- }
-
- .history-original, .history-translation {
-   flex: 1 1 0;
-   min-width: 0;
- }
-
-.history-translation {
-  color: var(--text);
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.history-original {
-  margin-top: 8px;
+.link-button {
+  border: 0;
+  padding: 0;
+  background: none;
   color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.45;
+  font: inherit;
+  cursor: pointer;
 }
 
-.history-meta {
-  margin-top: 10px;
-  color: rgba(168, 182, 202, 0.74);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
+.link-button.is-active {
+  color: var(--accent);
+}
+
+@keyframes captionIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes captionCaret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 @media (max-width: 760px) {
@@ -669,8 +673,12 @@ button {
     min-width: 0;
   }
 
-  .content-grid {
-    min-height: 400px;
+  .caption-stage {
+    min-height: 320px;
+  }
+
+  .caption-scroll {
+    padding: 16px 18px;
   }
 }
 
