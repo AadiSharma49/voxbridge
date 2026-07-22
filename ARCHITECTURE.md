@@ -1,105 +1,152 @@
-/**
- * VoxBridge V2 Core Architecture
- * 
- * Clean, modular foundation for speech-to-text + translation
- * Ready for Faster-Whisper integration
- * 
- * No Vosk. No tar.gz. No legacy baggage.
- */
+# Architecture
 
-// ============ CORE LAYER ============
-// /src/core/SpeechEngine.js
-//   - SpeechEngine (abstract base)
-//   - NoOpSpeechEngine (placeholder for Faster-Whisper)
-//   
-// /src/core/TranslationService.js
-//   - TranslationService (abstract base)
-//   - GoogleTranslateService (implementation)
+## The pipeline
 
-// ============ MODULE LAYER ============
-// /src/modules/audio/audioCapture.js
-//   - AudioCapture class (Web Audio API)
-//   - Captures microphone input at 16kHz mono
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ MAIN PROCESS (Node)                                                  │
+│   • frameless always-on-top overlay window                           │
+│   • internal HTTP server (renderer assets, models, wasm)             │
+│   • loopback audio grant via setDisplayMediaRequestHandler           │
+│   • translation egress (keeps renderer CSP at 'self')                │
+│   • global shortcuts                                                 │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │ contextBridge (no node integration)
+┌───────────────────────────────┴──────────────────────────────────────┐
+│ RENDERER                                                             │
+│                                                                      │
+│  AudioCapture ──── Float32Array frames, 16 kHz mono                  │
+│    system loopback or microphone                                     │
+│    resampling handled by AudioContext                                │
+│    RMS metering for diagnostics                                      │
+│         │                                                            │
+│         ▼                                                            │
+│  SpeechSegmenter ─── reframes to 512-sample windows                  │
+│    ├─ SileroVad ──── ONNX inference, speech probability              │
+│    └─ VadSegmenter ─ pure state machine, emits utterances            │
+│         │                                                            │
+│         ▼                                                            │
+│  WhisperEngine ──── batch transcription per utterance                │
+│                     + streaming partials on an interval              │
+│         │                                                            │
+│         ▼                                                            │
+│  TranslationService ──── cache, dedupe, IPC to main                  │
+│         │                                                            │
+│         ▼                                                            │
+│  Overlay UI ──── live captions + history                             │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
-// ============ RENDERER LAYER ============
-// /src/renderer/renderer.js
-//   - UI event handling
-//   - State management (appState)
-//   - Transcript processing
-//   - Translation integration
-//   - Keyboard shortcuts
+## Key decisions
 
-// ============ HOW TO INTEGRATE FASTER-WHISPER ============
+### Loopback audio, not the microphone
 
-/*
-1. Create new file: /src/core/FastWhisperEngine.js
+The product goal is understanding *another* person. `getUserMedia` returns
+your own voice, which is the wrong signal entirely. Electron 30's
+`setDisplayMediaRequestHandler` can grant `audio: 'loopback'`, which is the
+audio the system is playing. A video track must be requested alongside it
+because the API requires one; it is stopped and removed immediately, since
+encoding screen frames nobody looks at is pure cost.
 
-   export class FastWhisperEngine extends SpeechEngine {
-     constructor() {
-       super();
-       this.worker = null; // Web Worker or native module
-       this.model = null;
-     }
+### WASM inference instead of a native sidecar
 
-     async init(options = {}) {
-       // Load Faster-Whisper model
-       // Setup worker/thread
-     }
+`whisper.cpp` is faster on CPU. It also means building, signing and shipping a
+binary for Windows, macOS Intel, macOS ARM and Linux. For a cross-platform
+target, transformers.js running as WebAssembly is one code path everywhere
+with no build step. The `SpeechEngine` interface exists so a native backend
+can replace it later without the renderer knowing.
 
-     async start(onPartial, onFinal) {
-       this.onPartial = onPartial;
-       this.onFinal = onFinal;
-     }
+### VAD is mandatory, not an optimisation
 
-     async stop() {
-       // Stop listening
-     }
+Whisper hallucinates on silence — it emits `"Thank you."`,
+`"Subscribe to my channel!"`, `"[BLANK_AUDIO]"` with full confidence. Silence
+must never reach it. Silero VAD gates the input, and the engine additionally
+filters known hallucination patterns.
 
-     processAudio(audioFrame) {
-       // Send audio to Whisper worker
-       // Emit partials and finals via callbacks
-     }
+### Decision logic separated from inference
 
-     async destroy() {
-       // Cleanup worker/resources
-     }
+`VadSegmenter` is a pure state machine over `(window, probability)` pairs: no
+ONNX, no async, no audio APIs. That makes onset padding, trailing-silence
+trimming, hysteresis and force-flush unit-testable in milliseconds.
+`SileroVad` handles inference. `SpeechSegmenter` composes them.
 
-     getState() {
-       return this.state; // 'idle' | 'listening' | 'processing' | 'error'
-     }
-   }
+### Streaming partials over a batch model
 
-2. Update renderer.js line 72:
-   
-   // OLD:
-   speechEngine: new NoOpSpeechEngine(),
-   
-   // NEW:
-   speechEngine: new FastWhisperEngine(),
+Whisper cannot stream. To avoid a second of dead air mid-sentence, the engine
+re-transcribes the in-progress utterance on an interval and emits it as a
+partial, replaced by the accurate result when the phrase ends. Partials are
+dropped whenever a transcription is already running — they are disposable, and
+queueing them would delay the final result that actually matters.
 
-3. That's it! Everything else works unchanged.
-*/
+### Ordered async over a real-time source
 
-// ============ LANGUAGE SUPPORT ============
-// English, Hindi, German, French, Chinese, Spanish
-// (Easily extensible)
+Audio frames arrive on the audio thread's schedule; inference is async and
+slower. Frames are serialised through a promise chain, because Silero is
+recurrent and out-of-order windows corrupt its state. Leftover samples that do
+not fill a 512-sample window carry into the next frame.
 
-// ============ TRANSLATION SUPPORT ============
-// Google Translate (via unauthenticated endpoint)
-// Caching, deduplication, error handling built-in
+## Extension points
 
-// ============ OVERLAY MODES ============
-// - expanded: Full UI with history
-// - compact: Minimized pill view
-// - hidden: Overlay is hidden
+Both are one-line swaps in `appState`:
 
-// ============ KEYBOARD SHORTCUTS ============
-// Ctrl+Shift+M - Start/Stop microphone
-// Ctrl+Shift+S - Toggle mute
-// Ctrl+Shift+O - Cycle overlay modes
-// Ctrl+Shift+V - Hide overlay
+```js
+// src/core/SpeechEngine.js
+class SpeechEngine {
+  async init()
+  async start(onPartial, onFinal)
+  processAudio(frame)      // Float32Array, 16 kHz mono
+  async stop()
+  async destroy()
+  getState()               // 'idle' | 'listening' | 'processing' | 'error'
+}
 
-console.log('[VoxBridge V2] Architecture loaded');
-console.log('[SpeechEngine] Current: NoOp (placeholder)');
-console.log('[TranslationService] Current: Google Translate');
-console.log('[Ready for Faster-Whisper integration]');
+// src/core/TranslationService.js
+class TranslationService {
+  async translate(text, sourceLanguage, targetLanguage)
+  async isSupported(sourceLanguage, targetLanguage)
+}
+```
+
+## Security
+
+- `contextIsolation: true`, `nodeIntegration: false`; the renderer reaches the
+  main process only through an explicit `contextBridge` surface.
+- CSP restricts the renderer to `'self'`, plus `wasm-unsafe-eval` for the two
+  WebAssembly runtimes and the Hugging Face hosts for first-run model download.
+- Network egress for translation lives in the main process, so the renderer
+  needs no third-party `connect-src` and cannot be turned into a request proxy
+  by injected content.
+- The internal HTTP server normalises and containment-checks every path
+  (verified against `../`, percent-encoded, and mixed-separator traversal).
+
+## Testing
+
+| Layer | Approach |
+|---|---|
+| Segmentation logic | Unit tests over synthetic probability sequences |
+| VAD input construction | Unit tests on tensor layout and context chaining |
+| Silero model | Integration test: real speech, asserts detection |
+| Full pipeline | Integration test: audio file to transcript, asserts words |
+
+The Silero integration test exists because of a specific failure. Feeding the
+model bare 512-sample windows — omitting the 64 samples of context v5 expects
+— raises no error and returns ~0.07 for clear speech instead of ~1.0. The ONNX
+input axis is dynamic, so the wrong shape is silently accepted, and the
+symptom is identical to a dead microphone. No unit test would have caught it;
+only real audio through the real model does. The test asserts both directions:
+that speech is detected, and that removing the context breaks it.
+
+Speech fixtures are generated from the OS text-to-speech engine
+(`scripts/make-speech-fixture.js`) rather than committed recordings.
+
+## Known gaps
+
+- Translation depends on an unofficial endpoint. A local model (CTranslate2 +
+  NLLB, or bundled LibreTranslate) would make the app genuinely offline.
+- macOS system audio needs ScreenCaptureKit or a virtual audio device.
+- No packaged installer yet (electron-builder).
+- Electron 30 has an outstanding advisory; upgrading may also bring macOS
+  system-audio support.
+- `ScriptProcessorNode` is deprecated in favour of `AudioWorklet`. It is used
+  because the worklet would need a separately served module and a message port
+  per frame; the migration is straightforward but not free.

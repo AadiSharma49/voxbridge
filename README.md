@@ -1,69 +1,39 @@
-# VoxBridge VoiceLayer
+# VoxBridge
 
-A live speech translation overlay. It captures the audio coming out of your
-speakers, transcribes it, and shows translated captions on top of whatever app
-you are using — a video call, a video, or a phone on speaker.
+A desktop overlay that listens to the audio playing on your computer,
+transcribes it locally, and shows translated captions on top of any
+application — a video call, a lecture recording, a video.
 
-The goal is to make cross-language conversation work without paying for a
-Workspace/Zoom/Teams tier, and without your conversations leaving your machine.
+Live translated captions exist in Google Meet, Zoom and Teams, but each is
+locked to a paid tier and to that vendor's own product. VoxBridge captures at
+the operating-system level instead, so it works over anything that makes
+sound, and the speech recognition runs on your machine rather than in someone
+else's cloud.
+
+```
+System audio (loopback) ─┐
+                         ├─> 16 kHz mono ─> Silero VAD ─> Whisper ─> translate ─> overlay
+Microphone ──────────────┘
+```
 
 ## Status
 
-This project is mid-build. What works today:
-
-| Area | Status |
+| Component | State |
 |---|---|
-| Electron overlay shell, hotkeys, compact/expanded/hidden modes | ✅ Working |
-| System audio (loopback) capture on Windows / Linux | ✅ Working |
-| Microphone capture | ✅ Working |
-| Speech-to-text | ❌ **Not implemented** — `NoOpSpeechEngine` is a placeholder |
-| Translation | ⚠️ Works, but via an unofficial endpoint that will rate-limit |
-| macOS system audio | ⚠️ Requires a virtual audio device (BlackHole) |
+| Electron overlay, hotkeys, compact/expanded/hidden modes | Working |
+| System audio (loopback) capture — Windows, Linux | Working |
+| Microphone capture | Working |
+| Voice activity detection (Silero VAD v5, ONNX) | Working, tested |
+| Speech recognition (Whisper via transformers.js) | Working, tested |
+| Streaming partial transcripts | Working |
+| Translation | Working, but via an unofficial endpoint — see Limitations |
+| macOS system audio | Not supported — see Platforms |
+| Packaged installer | Not built yet |
 
-**Speech recognition is the next milestone.** Until `WhisperEngine` lands, the
-app captures audio and displays placeholder text.
+Verified end to end: `RUN_PIPELINE_TEST=1 npm test` feeds real speech through
+the real VAD and the real model and asserts the transcript.
 
-## Architecture
-
-```
-System audio (loopback) ──┐
-                          ├─> 16kHz mono ─> VAD ─> Whisper ─> Translation ─> Overlay
-Microphone ───────────────┘
-```
-
-Two interfaces keep the pieces swappable:
-
-- `SpeechEngine` (`src/core/SpeechEngine.js`) — `init / start / processAudio / stop / destroy`
-- `TranslationService` (`src/core/TranslationService.js`) — `translate / isSupported`
-
-Swapping an implementation means changing one line in `appState`. See
-`ARCHITECTURE.md`.
-
-## Why system audio, not the microphone
-
-To understand someone who speaks another language, you need to hear *them*.
-The microphone captures *your* voice. So the default source is loopback audio —
-the sound your speakers are playing. This is what makes the app work over any
-call software rather than being locked to one vendor.
-
-Platform support:
-
-| Platform | System audio | Notes |
-|---|---|---|
-| Windows | ✅ Native | WASAPI loopback |
-| Linux | ✅ Native | PipeWire; on PulseAudio pick a `.monitor` input |
-| macOS | ❌ | Needs [BlackHole](https://github.com/ExistentialAudio/BlackHole) or ScreenCaptureKit |
-
-## Privacy
-
-Speech-to-text is intended to run **locally** — audio never leaves the machine.
-
-**Translation currently does not.** Finalized transcript lines are sent to
-Google's public translate endpoint. Until local translation lands (see roadmap),
-treat transcribed text as leaving your device. This is the single biggest gap
-between what this app should be and what it is.
-
-## Install
+## Quick start
 
 Requires Node.js 18+.
 
@@ -72,13 +42,40 @@ npm install
 npm start
 ```
 
-On first start, allow the screen-capture and microphone permissions when
-prompted. Screen capture permission is what grants access to system audio; the
-video track is requested and immediately discarded.
+On first launch the speech model (~80 MB) downloads and is cached; later runs
+work offline. Grant the screen-capture permission when prompted — that is what
+gives access to system audio. The video track is requested because the API
+requires it, and discarded immediately.
+
+To caption something, play audio, then click **Start Listening**. To caption
+your own voice instead, switch **Listen to** to **Microphone**.
+
+```bash
+npm test                      # unit + VAD integration tests
+RUN_PIPELINE_TEST=1 npm test  # adds full audio-to-transcript test (slow)
+```
+
+## Why system audio rather than the microphone
+
+To understand someone who speaks another language, you have to hear *them*.
+The microphone captures *you*. So the default source is loopback audio — what
+your speakers are playing. This is the design decision that makes the tool
+work over any conferencing software instead of being tied to one.
+
+## Platforms
+
+| Platform | System audio | Notes |
+|---|---|---|
+| Windows | Supported | WASAPI loopback via Electron's display-media handler |
+| Linux | Supported | PipeWire; on PulseAudio, select a `.monitor` input |
+| macOS | **Not supported** | The OS exposes no loopback audio to applications. Requires a virtual device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole), selected as the input source |
+
+The capture layer reports platform capability to the UI, so macOS users are
+told this up front rather than discovering it when Start silently fails.
 
 ## Shortcuts
 
-Global (work from any app):
+Global:
 
 | Shortcut | Action |
 |---|---|
@@ -86,38 +83,43 @@ Global (work from any app):
 | `Ctrl/Cmd+Shift+S` | Toggle mute |
 | `Ctrl/Cmd+Shift+C` | Toggle compact mode |
 | `Ctrl/Cmd+Shift+V` | Show / hide overlay |
-| `Ctrl/Cmd+Enter` | Show / hide overlay (recreates window if closed) |
-| `Ctrl/Cmd+Shift+Q` | **Quit** |
+| `Ctrl/Cmd+Shift+Q` | Quit |
 
-While the overlay has focus:
+While the overlay has focus: `Esc` hides, `Ctrl+Q` quits, `Ctrl+Shift+I`
+opens DevTools.
 
-| Shortcut | Action |
-|---|---|
-| `Esc` | Hide overlay |
-| `Ctrl/Cmd+Q` | Quit |
-| `Ctrl/Cmd+Shift+I` | Toggle DevTools |
+## Privacy
 
-The overlay is frameless and hidden from the taskbar, so use the **Quit**
-button or `Ctrl+Shift+Q` to close it. (`Ctrl+Esc` is not used — Windows
-reserves it for the Start menu.)
+**Speech recognition is local.** Audio never leaves the machine. The model
+runs as WebAssembly in the app.
 
-## Roadmap
+**Translation is not.** Transcribed text is sent to Google's public translate
+endpoint. If you are captioning something sensitive, that text leaves your
+device. Replacing this with a local model is the main outstanding work.
 
-1. **Silero VAD** — segment audio into utterances (also gates Whisper's
-   tendency to hallucinate text during silence).
-2. **`WhisperEngine`** — whisper.cpp sidecar. `tiny` for fast partials, `small`
-   for accurate finals. Auto-detects the spoken language, which matters when you
-   don't know what language the other person will use.
-3. **Local translation** — CTranslate2 + NLLB-200, replacing the Google
-   endpoint. Makes the app genuinely offline and private.
-4. **Packaging** — electron-builder, models downloaded on first run rather than
-   bundled.
+**Content protection is off by default.** Electron can hide a window from
+screen capture, and the setting exists behind `VOXBRIDGE_PRIVATE_OVERLAY=1`.
+It is not the default: a captioning overlay that is deliberately invisible to
+the other party in a call is indistinguishable from tooling built to deceive
+them, and this is an accessibility tool.
 
-## Note on Vosk
+## Limitations
 
-Earlier versions used Vosk for offline speech-to-text. It was dropped because it
-requires one model per language chosen in advance, which conflicts with
-auto-detecting an unknown speaker's language, and it does not scale past a
-handful of languages. If `assets/models/` still contains `vosk-model-*`
-directories from a previous checkout, they are unused and can be deleted
-(~613 MB).
+- **Latency.** Whisper is a batch model: it transcribes complete phrases, not
+  a live stream. Streaming partials hide most of this, but final text still
+  lands roughly a second after a sentence ends. Word-by-word output would
+  require a different class of model.
+- **Accuracy.** Ships with `whisper-tiny` for speed. `whisper-base` is in the
+  fallback chain and is noticeably more accurate but slower.
+- **Translation provider.** The endpoint used is unofficial and undocumented.
+  It will rate-limit under sustained use, and it is not a basis for anything
+  production.
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the pipeline in detail, the
+extension points, and the reasoning behind the main technical decisions.
+
+## License
+
+MIT
