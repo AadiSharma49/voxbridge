@@ -62,7 +62,6 @@ const ui = {
   captionScaleValue: document.getElementById('captionScaleValue'),
   sourceLanguageSelect: document.getElementById('sourceLanguageSelect'),
   targetLanguageSelect: document.getElementById('targetLanguageSelect'),
-  audioSourceSelect: document.getElementById('audioSourceSelect'),
   audioNotice: document.getElementById('audioNotice'),
   levelRow: document.getElementById('levelRow'),
   levelFill: document.getElementById('levelFill'),
@@ -72,7 +71,6 @@ const ui = {
   compactToggle: document.getElementById('compactToggle'),
   hideButton: document.getElementById('hideButton'),
   quitButton: document.getElementById('quitButton'),
-  muteButton: document.getElementById('muteButton'),
   languageSummary: document.getElementById('languageSummary'),
   pillStatusText: document.getElementById('pillStatusText')
 };
@@ -83,11 +81,9 @@ const settings = loadSettings();
 
 const appState = {
   isListening: false,
-  isMuted: false,
   overlayMode: 'expanded',
   sourceLanguage: settings.sourceLanguage,
   targetLanguage: settings.targetLanguage,
-  audioSource: settings.audioSource,
   captionScale: settings.captionScale,
   audioCapabilities: null,
   isTesting: false,
@@ -123,15 +119,13 @@ function setModelStatus(text) {
 
 function setMicActive(active) {
   const badge = ui.micBadge;
-  if (!badge) return;
-
-  badge.textContent = appState.isMuted ? 'Muted' : active ? 'Live' : 'Off';
-  badge.classList.toggle('live', active && !appState.isMuted);
-  badge.classList.toggle('muted', appState.isMuted);
+  if (badge) {
+    badge.textContent = active ? 'Live' : 'Off';
+    badge.classList.toggle('live', active);
+  }
 
   if (ui.statusDot) {
-    ui.statusDot.classList.toggle('live', active && !appState.isMuted);
-    ui.statusDot.classList.toggle('muted', appState.isMuted);
+    ui.statusDot.classList.toggle('live', active);
   }
 }
 
@@ -329,7 +323,6 @@ function persistSettings() {
   saveSettings({
     sourceLanguage: appState.sourceLanguage,
     targetLanguage: appState.targetLanguage,
-    audioSource: appState.audioSource,
     captionScale: appState.captionScale,
     speakTranslation: appState.speakTranslation
   });
@@ -414,22 +407,14 @@ function resetSilenceTracking() {
 }
 
 /**
- * The most common setup mistake: speaking into the mic while the app is
- * capturing system audio. Both produce "nothing happens", so say which.
+ * Silence usually means nothing is actually playing: VoxBridge captures what
+ * your SPEAKERS output, so there has to be sound coming out of them.
  */
 function warnAboutSilence() {
-  if (appState.audioSource === 'system') {
-    showAudioNotice(
-      'No sound is reaching VoxBridge. System audio captures what your ' +
-      'SPEAKERS are playing — not your microphone. Play a video, or switch ' +
-      '"Listen to" to Microphone (me) to caption your own voice.'
-    );
-  } else {
-    showAudioNotice(
-      'No sound is reaching VoxBridge. Check the microphone is not muted ' +
-      'and is selected as the default input device.'
-    );
-  }
+  showAudioNotice(
+    'No sound is reaching VoxBridge. It captures what your SPEAKERS are ' +
+    'playing, so make sure a video or audio is actually playing out loud.'
+  );
 }
 
 // ============ MODEL LOADING ============
@@ -456,7 +441,7 @@ async function prepareSpeechEngine() {
     appState.modelReady = true;
     setModelStatus('Whisper ready');
     setStatus('Ready');
-    if (ui.startButton) ui.startButton.disabled = appState.isMuted;
+    if (ui.startButton) ui.startButton.disabled = false;
   } catch (error) {
     console.error('[Renderer] Speech engine failed to load:', error);
     appState.modelReady = false;
@@ -485,18 +470,11 @@ function refreshAudioNotice() {
   const capabilities = appState.audioCapabilities;
   if (!capabilities) return;
 
-  if (appState.audioSource === 'system' && capabilities.loopback === 'unsupported') {
+  if (capabilities.loopback === 'unsupported') {
     showAudioNotice(capabilities.note);
   } else {
     showAudioNotice('');
   }
-}
-
-function handleAudioSourceChange() {
-  appState.audioSource = ui.audioSourceSelect.value;
-  refreshAudioNotice();
-  persistSettings();
-  console.log('[Renderer] Audio source changed to:', appState.audioSource);
 }
 
 // ============ TRANSLATION ============
@@ -592,7 +570,7 @@ function applyTranslation(line, originalText, translatedText) {
 // ============ SPEECH ENGINE CONTROL ============
 
 async function startListening() {
-  if (appState.isListening || appState.isMuted) {
+  if (appState.isListening) {
     return;
   }
 
@@ -604,7 +582,6 @@ async function startListening() {
   console.log('[Renderer] Starting listening...');
   if (ui.startButton) ui.startButton.disabled = true;
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = true;
-  if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = true;
   setStatus('Listening');
   setPlaceholder('Listening…');
   showAudioNotice('');
@@ -621,7 +598,7 @@ async function startListening() {
 
     await appState.audioCapture.start(
       (audioFrame) => { appState.speechEngine.processAudio(audioFrame); },
-      { sourceType: appState.audioSource }
+      { sourceType: 'system' }
     );
 
     appState.isListening = true;
@@ -637,7 +614,6 @@ async function startListening() {
     showAudioNotice(error.message);
     if (ui.startButton) ui.startButton.disabled = false;
     if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = false;
-    if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = false;
   }
 }
 
@@ -655,11 +631,10 @@ async function stopListening() {
   resetSilenceTracking();
 
   appState.isListening = false;
-  if (ui.startButton) ui.startButton.disabled = appState.isMuted;
+  if (ui.startButton) ui.startButton.disabled = false;
   if (ui.stopButton) ui.stopButton.disabled = true;
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = false;
-  if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = false;
-  setStatus(appState.isMuted ? 'Muted' : 'Ready');
+  setStatus('Ready');
   setMicActive(false);
 }
 
@@ -742,29 +717,8 @@ function setTestingUi(testing) {
     ui.testFileButton.textContent = testing ? 'Stop test' : 'Test with a file';
     ui.testFileButton.classList.toggle('is-active', testing);
   }
-  // Live controls make no sense mid-test.
-  if (ui.startButton) ui.startButton.disabled = testing || appState.isMuted;
-  if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = testing;
-}
-
-async function toggleMute() {
-  appState.isMuted = !appState.isMuted;
-  if (ui.muteButton) {
-    ui.muteButton.classList.toggle('is-active', appState.isMuted);
-    ui.muteButton.setAttribute('aria-label', appState.isMuted ? 'Unmute' : 'Mute');
-  }
-
-  if (appState.isMuted) {
-    await stopListening();
-    if (ui.startButton) ui.startButton.disabled = true;
-    setStatus('Muted');
-    setPlaceholder('Muted.');
-  } else {
-    if (ui.startButton) ui.startButton.disabled = false;
-    setStatus('Ready');
-    setPlaceholder('Ready to listen.');
-  }
-  setMicActive(appState.isListening);
+  // The Start button makes no sense mid-test.
+  if (ui.startButton) ui.startButton.disabled = testing;
 }
 
 // ============ SPOKEN VOICE ============
@@ -867,9 +821,6 @@ document.addEventListener('keydown', (e) => {
     case 'M':
       toggleListening().catch(console.error);
       break;
-    case 'S':
-      toggleMute().catch(console.error);
-      break;
     case 'O':
       cycleOverlayMode();
       break;
@@ -885,7 +836,6 @@ document.addEventListener('keydown', (e) => {
 
 ui.startButton?.addEventListener('click', () => startListening().catch(console.error));
 ui.stopButton?.addEventListener('click', () => stopListening().catch(console.error));
-ui.muteButton?.addEventListener('click', () => toggleMute().catch(console.error));
 ui.clearButton?.addEventListener('click', clearHistory);
 ui.copyButton?.addEventListener('click', () => copyTranscript().catch(console.error));
 
@@ -937,7 +887,6 @@ ui.autoscrollToggle?.addEventListener('click', () => {
 
 ui.sourceLanguageSelect?.addEventListener('change', handleSourceLanguageChange);
 ui.targetLanguageSelect?.addEventListener('change', handleTargetLanguageChange);
-ui.audioSourceSelect?.addEventListener('change', handleAudioSourceChange);
 
 window.desktopApp.onOverlayShortcut((command) => {
   switch (command) {
@@ -953,9 +902,6 @@ window.desktopApp.onOverlayShortcut((command) => {
     case 'hidden':
       appState.overlayMode = 'hidden';
       ui.overlayRoot?.classList.remove('is-expanded', 'is-compact');
-      break;
-    case 'toggle-mute':
-      toggleMute().catch(console.error);
       break;
     default:
       break;
@@ -977,7 +923,6 @@ async function init() {
   // never disagrees with the state the app is actually running with.
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.value = appState.sourceLanguage;
   if (ui.targetLanguageSelect) ui.targetLanguageSelect.value = appState.targetLanguage;
-  if (ui.audioSourceSelect) ui.audioSourceSelect.value = appState.audioSource;
   applyCaptionScale(appState.captionScale);
   updateSpeakButton();
 

@@ -11,9 +11,7 @@ sound, and the speech recognition runs on your machine rather than in someone
 else's cloud.
 
 ```
-System audio (loopback) ─┐
-                         ├─> 16 kHz mono ─> Silero VAD ─> Whisper ─> translate ─> overlay
-Microphone ──────────────┘
+System audio (loopback) ─> 16 kHz mono ─> Silero VAD ─> Whisper ─> translate ─> captions + spoken voice
 ```
 
 ## Status
@@ -22,11 +20,12 @@ Microphone ──────────────┘
 |---|---|
 | Electron overlay, hotkeys, compact/expanded/hidden modes | Working |
 | System audio (loopback) capture — Windows, Linux | Working |
-| Microphone capture | Working |
 | Voice activity detection (Silero VAD v5, ONNX) | Working, tested |
 | Speech recognition (Whisper via transformers.js) | Working, tested |
 | Streaming partial transcripts | Working |
 | Translation | Working, but via an unofficial endpoint — see Limitations |
+| Spoken translation (synthetic voice, Web Speech API) | Working |
+| File test mode (caption/dub any audio or video file) | Working |
 | macOS system audio | Not supported — see Platforms |
 | Packaged installer | Not built yet |
 
@@ -47,8 +46,10 @@ work offline. Grant the screen-capture permission when prompted — that is what
 gives access to system audio. The video track is requested because the API
 requires it, and discarded immediately.
 
-To caption something, play audio, then click **Start Listening**. To caption
-your own voice instead, switch **Listen to** to **Microphone**.
+To caption something, play audio, then click **Start Listening**. To hear the
+translation read aloud as well, turn on **Speak translation**. To try it with
+no audio routing at all, click **Test with a file** and pick any clip — it
+plays aloud and is captioned (and optionally spoken) through the same pipeline.
 
 ```bash
 npm test                      # unit + VAD integration tests
@@ -58,9 +59,9 @@ RUN_PIPELINE_TEST=1 npm test  # adds full audio-to-transcript test (slow)
 ## Why system audio rather than the microphone
 
 To understand someone who speaks another language, you have to hear *them*.
-The microphone captures *you*. So the default source is loopback audio — what
-your speakers are playing. This is the design decision that makes the tool
-work over any conferencing software instead of being tied to one.
+The microphone captures *you*. So the source is loopback audio — what your
+speakers are playing. This is the design decision that makes the tool work
+over any conferencing software or media player instead of being tied to one.
 
 ## Platforms
 
@@ -80,7 +81,6 @@ Global:
 | Shortcut | Action |
 |---|---|
 | `Ctrl/Cmd+Shift+M` | Start / stop capture |
-| `Ctrl/Cmd+Shift+S` | Toggle mute |
 | `Ctrl/Cmd+Shift+C` | Toggle compact mode |
 | `Ctrl/Cmd+Shift+V` | Show / hide overlay |
 | `Ctrl/Cmd+Shift+Q` | Quit |

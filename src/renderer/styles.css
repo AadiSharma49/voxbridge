@@ -268,11 +268,6 @@ button {
   box-shadow: 0 0 18px rgba(184, 216, 189, 0.16);
 }
 
-.mic-badge.muted {
-  background: rgba(253, 164, 175, 0.16);
-  color: var(--danger);
-}
-
 .assistant-sidebar,
 .workspace-main,
 .caption-stage {
@@ -337,10 +332,6 @@ button {
 .status-dot.live {
   background: var(--live);
   box-shadow: 0 0 8px var(--live);
-}
-
-.status-dot.muted {
-  background: var(--danger);
 }
 
 #statusText {

@@ -4,7 +4,6 @@ const http = require('http');
 const path = require('path');
 
 const HOST = '127.0.0.1';
-const DEFAULT_TRANSLATION_ENDPOINT = 'https://translate.argosopentech.com/translate';
 let mainWindow;
 let staticServer;
 let overlayState = 'expanded';
@@ -229,15 +228,9 @@ function registerShortcuts() {
     sendOverlayCommand('toggle-compact');
   });
 
-  // Keep these aligned with the renderer's local handlers and the README:
-  // M toggles capture, S toggles mute. Registering M as mute here previously
-  // meant the documented start/stop shortcut could never fire.
+  // Ctrl/Cmd+Shift+M toggles capture (start/stop listening).
   globalShortcut.register('CommandOrControl+Shift+M', () => {
     sendOverlayCommand('toggle-listen');
-  });
-
-  globalShortcut.register('CommandOrControl+Shift+S', () => {
-    sendOverlayCommand('toggle-mute');
   });
 
   // Shortcut: Ctrl/Cmd+Enter toggles the overlay visibility.
@@ -287,67 +280,7 @@ function registerShortcuts() {
 
 ipcMain.handle('app:get-version', () => app.getVersion());
 ipcMain.handle('app:quit', () => quitApplication());
-ipcMain.handle('window:minimize', () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.minimize();
-    return { ok: true };
-  }
-  return { ok: false };
-});
 ipcMain.handle('overlay:set-state', (_, state) => applyOverlayState(state));
-ipcMain.handle('translation:get-languages', async (_, { endpoint } = {}) => {
-  const activeEndpoint = endpoint || DEFAULT_TRANSLATION_ENDPOINT;
-  const languagesUrl = activeEndpoint.replace(/\/translate$/, '/languages');
-
-  try {
-    const response = await fetch(languagesUrl, {
-      headers: {
-        Accept: 'application/json'
-      }
-    });
-
-    const rawBody = await response.text();
-    let parsedBody = null;
-
-    try {
-      parsedBody = rawBody ? JSON.parse(rawBody) : null;
-    } catch (error) {
-      parsedBody = rawBody;
-    }
-
-    console.info('[Main] Translation languages response', {
-      endpoint: activeEndpoint,
-      status: response.status,
-      body: parsedBody
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        endpoint: activeEndpoint,
-        error: `Languages request failed with ${response.status}`,
-        data: parsedBody
-      };
-    }
-
-    return {
-      ok: true,
-      endpoint: activeEndpoint,
-      data: parsedBody
-    };
-  } catch (error) {
-    console.error('[Main] Translation languages request failed', {
-      endpoint: activeEndpoint,
-      error
-    });
-
-    return {
-      ok: false,
-      endpoint: activeEndpoint,
-      error: error.message
-    };
-  }
-});
 /**
  * Translation runs in the main process, not the renderer.
  *
@@ -412,68 +345,6 @@ ipcMain.handle('translation:translate', async (_, payload = {}) => {
       ok: false,
       error: isTimeout ? 'Translation timed out' : error.message,
       retryable: true
-    };
-  }
-});
-
-ipcMain.handle('translation:request', async (_, payload = {}) => {
-  const endpoint = payload.endpoint || DEFAULT_TRANSLATION_ENDPOINT;
-  const requestBody = {
-    q: payload.q || '',
-    source: payload.source || 'en',
-    target: payload.target || 'hi',
-    format: payload.format || 'text'
-  };
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    const rawBody = await response.text();
-    let parsedBody = null;
-
-    try {
-      parsedBody = rawBody ? JSON.parse(rawBody) : null;
-    } catch (error) {
-      parsedBody = rawBody;
-    }
-
-    console.info('[Main] Translation API response', {
-      endpoint,
-      status: response.status,
-      body: parsedBody
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        endpoint,
-        error: `Translation failed with ${response.status}`,
-        data: parsedBody
-      };
-    }
-
-    return {
-      ok: true,
-      endpoint,
-      data: parsedBody
-    };
-  } catch (error) {
-    console.error('[Main] Translation request failed', {
-      endpoint,
-      requestBody,
-      error
-    });
-
-    return {
-      ok: false,
-      endpoint,
-      error: error.message
     };
   }
 });
@@ -546,81 +417,6 @@ function registerDisplayMediaHandler() {
 }
 
 ipcMain.handle('audio:get-capabilities', () => getAudioCapabilities());
-
-const BASE_MODEL_PATH = path.join(__dirname, "../assets/models");
-const MODEL_PATHS = {
-  en: "vosk-model-small-en-us-0.15",
-  hi: "vosk-model-small-hi-0.22",
-  de: "vosk-model-small-de-0.15",
-  fr: "vosk-model-small-fr-0.22",
-  zh: "vosk-model-small-cn-0.22",
-  es: "vosk-model-small-es-0.42"
-};
-
-function resolveModelPaths(langCode) {
-  const modelName = MODEL_PATHS[langCode];
-
-  if (!modelName) {
-    return null;
-  }
-
-  return {
-    folderPath: path.join(BASE_MODEL_PATH, modelName),
-    archivePath: path.join(BASE_MODEL_PATH, `${modelName}.tar.gz`)
-  };
-}
-
-ipcMain.handle('models:check-availability', async (_, langCode) => {
-  const modelPaths = resolveModelPaths(langCode);
-  
-  console.log('[Main] Checking model path:', modelPaths?.archivePath || modelPaths?.folderPath);
-  
-  if (!modelPaths) {
-    console.log('[Main] Unknown language code:', langCode);
-    return { available: false, path: null };
-  }
-
-  try {
-    const exists = fs.existsSync(modelPaths.archivePath) || fs.existsSync(modelPaths.folderPath);
-    console.log('[Main] Model existence result:', exists, 'for', langCode);
-    return {
-      available: exists,
-      path: fs.existsSync(modelPaths.archivePath) ? modelPaths.archivePath : modelPaths.folderPath
-    };
-  } catch (error) {
-    console.error('[Main] Error checking model existence:', error);
-    return { available: false, path: modelPaths.archivePath };
-  }
-});
-
-ipcMain.handle('models:get-path', async (_, langCode) => {
-  console.log("Selected language:", langCode);
-  
-  // Step 1: Validate language exists in mapping
-  if (!resolveModelPaths(langCode)) {
-    console.warn("Invalid language:", langCode, "falling back to English");
-    langCode = "en";
-  }
-  
-  // Step 2: Validate model file exists
-  let modelPaths = resolveModelPaths(langCode);
-  if (!fs.existsSync(modelPaths.archivePath) && !fs.existsSync(modelPaths.folderPath)) {
-    console.warn("Model not found for:", langCode, "falling back to English");
-    langCode = "en";
-    modelPaths = resolveModelPaths(langCode);
-  }
-  
-  // Step 3: Final validation
-  if (!modelPaths) {
-    throw new Error("Model path is undefined even after fallback");
-  }
-  
-  const modelPath = fs.existsSync(modelPaths.archivePath) ? modelPaths.archivePath : modelPaths.folderPath;
-  console.log("Final language used:", langCode);
-  console.log("Resolved model path:", modelPath);
-  
-  return modelPath;
-});
 
 app.whenReady().then(async () => {
   registerDisplayMediaHandler();

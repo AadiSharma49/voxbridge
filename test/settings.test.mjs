@@ -39,14 +39,14 @@ test('round-trips saved settings', () => {
   saveSettings({
     sourceLanguage: 'fr',
     targetLanguage: 'en',
-    audioSource: 'mic',
+    speakTranslation: true,
     captionScale: 1.3
   });
 
   const loaded = loadSettings();
   assert.equal(loaded.sourceLanguage, 'fr');
   assert.equal(loaded.targetLanguage, 'en');
-  assert.equal(loaded.audioSource, 'mic');
+  assert.equal(loaded.speakTranslation, true);
   assert.equal(loaded.captionScale, 1.3);
 });
 
@@ -61,13 +61,13 @@ test('invalid values are rejected per-field, valid ones kept', () => {
   reset();
   globalThis.localStorage.setItem(KEY, JSON.stringify({
     sourceLanguage: 'de',
-    audioSource: 'telepathy',   // not a real source
+    speakTranslation: 'yes',    // not a boolean
     captionScale: 99            // outside the allowed range
   }));
 
   const loaded = loadSettings();
   assert.equal(loaded.sourceLanguage, 'de', 'valid field should survive');
-  assert.equal(loaded.audioSource, DEFAULT_SETTINGS.audioSource);
+  assert.equal(loaded.speakTranslation, DEFAULT_SETTINGS.speakTranslation);
   assert.equal(loaded.captionScale, DEFAULT_SETTINGS.captionScale);
 });
 

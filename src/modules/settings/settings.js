@@ -14,9 +14,7 @@ const STORAGE_KEY = 'voxbridge.settings.v1';
 export const DEFAULT_SETTINGS = {
   sourceLanguage: 'auto',
   targetLanguage: 'hi',
-  audioSource: 'system',
   captionScale: 1,
-  autoStart: false,
   speakTranslation: false
 };
 
@@ -24,9 +22,7 @@ export const DEFAULT_SETTINGS = {
 const VALIDATORS = {
   sourceLanguage: (v) => typeof v === 'string' && v.length > 0 && v.length <= 8,
   targetLanguage: (v) => typeof v === 'string' && v.length > 0 && v.length <= 8,
-  audioSource: (v) => v === 'system' || v === 'mic',
   captionScale: (v) => typeof v === 'number' && v >= 0.75 && v <= 2,
-  autoStart: (v) => typeof v === 'boolean',
   speakTranslation: (v) => typeof v === 'boolean'
 };
 
