@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS = {
   sourceLanguage: 'auto',
   targetLanguage: 'hi',
   captionScale: 1,
-  speakTranslation: false
+  speakTranslation: true
 };
 
 /** Guards against a stored value that is no longer valid in this build. */

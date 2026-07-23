@@ -1,19 +1,22 @@
 :root {
   color-scheme: dark;
-  --overlay-opacity: 0.94;
-  --panel-bg: rgba(18, 19, 22, var(--overlay-opacity)); /* glass background */
-  --panel-border: rgba(232, 232, 228, 0.16);
-  --surface: rgba(246, 246, 242, 0.07);
-  --surface-strong: rgba(246, 246, 242, 0.12);
-  --text: #f3f3ef;
-  --muted: #aaa9a3;
-  --soft: #d8d7d0;
-  --signal: #d7d0bd;
-  --signal-bright: #fff5d9;
-  --live: #b8d8bd;
-  --danger: #e0aaa6;
-  --accent: #ff9500; /* orange accent */
-  --shadow: 0 30px 90px rgba(0, 0, 0, 0.44);
+  --overlay-opacity: 0.95;
+  --panel-bg: rgba(16, 16, 19, var(--overlay-opacity)); /* cinema glass */
+  --panel-border: rgba(232, 230, 224, 0.16);
+  --surface: rgba(246, 244, 238, 0.07);
+  --surface-strong: rgba(246, 244, 238, 0.13);
+  --text: #f4f2ec;
+  --muted: #a8a69d;
+  --soft: #dad8cf;
+  --signal: #e7dcc0;
+  --signal-bright: #fff3d6;
+  --live: #68e0a0;          /* active dub pulse */
+  --live-soft: rgba(104, 224, 160, 0.16);
+  --danger: #e5a39c;
+  --accent: #ffb545;        /* warm amber — the dub action */
+  --accent-strong: #ffc76b;
+  --accent-soft: rgba(255, 181, 69, 0.14);
+  --shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -58,44 +61,6 @@ button {
   position: relative;
 }
 
-.win-controls {
-  position: absolute;
-  top: 22px;
-  left: 22px;
-  display: flex;
-  gap: 6px;
-  z-index: 100;
-  -webkit-app-region: no-drag;
-}
-
-.win-btn {
-  width: 30px;
-  height: 22px;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  transition: background 140ms ease, color 140ms ease;
-  line-height: 1;
-}
-
-.win-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--accent);
-}
-
-.win-btn-close:hover {
-  background: rgba(255, 80, 70, 0.5);
-  color: #fff;
-}
-
 .assistant-workspace {
   width: 100%;
   height: 100%;
@@ -105,26 +70,12 @@ button {
 .compact-pill {
   border: 1px solid var(--panel-border);
   background:
-    linear-gradient(145deg, rgba(255, 255, 250, 0.12), rgba(255, 255, 250, 0.04)),
+    linear-gradient(145deg, rgba(255, 252, 244, 0.11), rgba(255, 252, 244, 0.035)),
     var(--panel-bg);
   box-shadow: var(--shadow);
   backdrop-filter: blur(28px) saturate(120%);
   border-radius: 16px;
   transition: background 200ms ease, transform 200ms ease;
-}
-
-/* Top floating control bar */
-.top-floating-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  backdrop-filter: blur(30px) saturate(115%);
-  box-shadow: var(--shadow);
-  margin-bottom: 12px;
 }
 
 .workspace-panel {
@@ -178,7 +129,7 @@ button {
 }
 
 .overlay-shell.is-compact .assistant-sidebar,
-.overlay-shell.is-compact .top-control-bar,
+.overlay-shell.is-compact .dub-console,
 .overlay-shell.is-compact .caption-footer,
 .overlay-shell.is-compact .level-row,
 .overlay-shell.is-compact .audio-notice,
@@ -357,18 +308,25 @@ button {
 }
 
 .sidebar-btn {
-  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
   padding: 0 14px;
   font-size: 0.82rem;
   font-weight: 650;
-  border-radius: 10px;
-  transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
+  border-radius: 11px;
+  transition: transform 140ms ease, opacity 140ms ease,
+    background 140ms ease, box-shadow 140ms ease;
 }
 
+/* Start dubbing — the primary action, so it carries the amber accent. */
 .primary-btn {
-  color: #171717;
-  background: var(--signal);
+  color: #241a05;
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
   border: none;
+  box-shadow: 0 8px 22px rgba(255, 181, 69, 0.24);
 }
 
 .secondary-btn {
@@ -378,13 +336,14 @@ button {
 }
 
 .ghost-btn {
-  color: var(--soft);
+  color: var(--muted);
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .primary-btn:hover:enabled {
-  background: var(--signal-bright);
+  background: linear-gradient(180deg, #ffd07f, var(--accent-strong));
+  box-shadow: 0 10px 26px rgba(255, 181, 69, 0.34);
   transform: translateY(-1px);
 }
 
@@ -396,7 +355,38 @@ button {
 
 .sidebar-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.46;
+  opacity: 0.42;
+}
+
+/* Dub voice toggle: an on/off switch, styled so its state reads instantly. */
+.toggle-btn {
+  color: var(--soft);
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.toggle-btn:hover:enabled {
+  background: var(--surface-strong);
+}
+
+.toggle-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.toggle-btn.is-active {
+  color: var(--text);
+  background: var(--live-soft);
+  border-color: rgba(104, 224, 160, 0.4);
+}
+
+.toggle-btn.is-active .toggle-dot {
+  background: var(--live);
+  box-shadow: 0 0 10px var(--live);
 }
 
 .workspace-main {
@@ -406,43 +396,151 @@ button {
   min-height: 0;
 }
 
-.top-control-bar {
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
+/* ============ DUB CONSOLE (hero) ============ */
+
+/* Grid keeps the console predictable: the live state and window controls
+   share the top row, and the language flow gets its own row beneath. */
+.dub-console {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "live    controls"
+    "flow    flow";
+  align-items: center;
+  gap: 12px 16px;
+  padding: 12px 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  background: rgba(246, 246, 242, 0.052);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 181, 69, 0.06), rgba(255, 255, 250, 0.02)),
+    rgba(0, 0, 0, 0.24);
   flex: 0 0 auto;
 }
 
-.language-controls {
-  gap: 8px;
+.dub-live {
+  grid-area: live;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
 }
 
-.select-field {
-  min-width: 120px;
+.dub-console .window-controls {
+  grid-area: controls;
 }
 
-.select-field span {
-  display: block;
+.dub-console .dub-flow {
+  grid-area: flow;
+}
+
+/* The live orb: amber and steady when idle, green and pulsing when dubbing. */
+.dub-orb {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(255, 181, 69, 0.5);
+  transition: background 220ms ease, box-shadow 220ms ease;
+}
+
+.dub-live.is-live .dub-orb {
+  background: var(--live);
+  box-shadow: 0 0 16px rgba(104, 224, 160, 0.7);
+}
+
+.dub-live.is-live .dub-orb::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--live);
+  animation: dubRing 1.6s ease-out infinite;
+}
+
+.dub-live-copy {
+  min-width: 0;
+}
+
+.dub-state {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.dub-live.is-live .dub-state {
+  color: var(--live);
+}
+
+.dub-sub {
+  margin: 2px 0 0;
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Language flow: Hearing X  →  Dubbing to Y */
+.dub-flow {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.flow-field {
+  display: block;
+  min-width: 118px;
+}
+
+.flow-field > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.select-field select {
+.flow-field.flow-to > span {
+  color: var(--accent);
+}
+
+.flow-field select {
   width: 100%;
-  margin-top: 4px;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.32);
   outline: none;
   font-size: 0.82rem;
+  font-weight: 600;
+  transition: border-color 140ms ease;
+}
+
+.flow-field select:hover,
+.flow-field select:focus {
+  border-color: rgba(255, 181, 69, 0.5);
+}
+
+.flow-field.flow-to select {
+  border-color: rgba(255, 181, 69, 0.32);
+  background:
+    linear-gradient(0deg, rgba(255, 181, 69, 0.08), rgba(255, 181, 69, 0.08)),
+    rgba(0, 0, 0, 0.32);
+}
+
+.flow-arrow {
+  padding-bottom: 7px;
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .audio-notice {
@@ -713,6 +811,12 @@ button {
   50% { opacity: 0; }
 }
 
+/* Expanding ring around the live orb while dubbing. */
+@keyframes dubRing {
+  0% { opacity: 0.7; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
 @media (max-width: 760px) {
   .workspace-panel {
     grid-template-columns: 1fr;
@@ -727,13 +831,25 @@ button {
     margin-top: 14px;
   }
 
-  .top-control-bar,
-  .language-controls {
+  .dub-console {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "live"
+      "flow"
+      "controls";
     align-items: stretch;
-    flex-direction: column;
   }
 
-  .language-controls {
+  .dub-console .window-controls {
+    justify-content: flex-start;
+  }
+
+  .dub-flow {
+    align-items: stretch;
+  }
+
+  .flow-field {
+    flex: 1;
     min-width: 0;
   }
 
@@ -743,6 +859,14 @@ button {
 
   .caption-scroll {
     padding: 16px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark,
+  .dub-live.is-live .dub-orb::after,
+  .caption-line.is-partial .caption-primary::after {
+    animation: none;
   }
 }
 
@@ -759,17 +883,4 @@ button {
     transform: scale(1);
     box-shadow: 0 0 22px rgba(255, 245, 217, 0.72);
   }
-}
-.top-floating-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
-  backdrop-filter: blur(30px) saturate(115%);
-  box-shadow: var(--shadow);
-  margin-bottom: 12px;
-  transition: background 200ms ease, transform 200ms ease;
 }

@@ -71,7 +71,10 @@ const ui = {
   hideButton: document.getElementById('hideButton'),
   quitButton: document.getElementById('quitButton'),
   languageSummary: document.getElementById('languageSummary'),
-  pillStatusText: document.getElementById('pillStatusText')
+  pillStatusText: document.getElementById('pillStatusText'),
+  dubHero: document.getElementById('dubHero'),
+  dubState: document.getElementById('dubState'),
+  dubSub: document.getElementById('dubSub')
 };
 
 // ============ APPLICATION STATE ============
@@ -107,9 +110,25 @@ const appState = {
 
 // ============ UI UPDATE FUNCTIONS ============
 
+// The hero shows a punchier headline than the terse sidebar status.
+const DUB_HEADLINES = {
+  Idle: 'Ready to dub',
+  Starting: 'Starting…',
+  Preparing: 'Preparing…',
+  Ready: 'Ready to dub',
+  'Dubbing live': 'Dubbing live',
+  Error: 'Something went wrong'
+};
+
 function setStatus(text) {
   if (ui.statusText) ui.statusText.textContent = text;
   if (ui.pillStatusText) ui.pillStatusText.textContent = text;
+  if (ui.dubState) ui.dubState.textContent = DUB_HEADLINES[text] || text;
+}
+
+/** The secondary line under the hero headline — a plain-language hint. */
+function setDubSub(text) {
+  if (ui.dubSub) ui.dubSub.textContent = text;
 }
 
 function setModelStatus(text) {
@@ -126,6 +145,9 @@ function setMicActive(active) {
   if (ui.statusDot) {
     ui.statusDot.classList.toggle('live', active);
   }
+
+  // Drives the pulsing ring on the hero orb.
+  if (ui.dubHero) ui.dubHero.classList.toggle('is-live', active);
 }
 
 async function setOverlayMode(mode) {
@@ -391,6 +413,7 @@ function reportModelProgress(progress) {
 async function prepareSpeechEngine() {
   setModelStatus('Loading model...');
   setStatus('Preparing');
+  setDubSub('Loading the speech model…');
   if (ui.startButton) ui.startButton.disabled = true;
 
   try {
@@ -398,12 +421,14 @@ async function prepareSpeechEngine() {
     appState.modelReady = true;
     setModelStatus('Whisper ready');
     setStatus('Ready');
+    setDubSub('Play a video, then press Start dubbing.');
     if (ui.startButton) ui.startButton.disabled = false;
   } catch (error) {
     console.error('[Renderer] Speech engine failed to load:', error);
     appState.modelReady = false;
     setModelStatus('Model failed');
     setStatus('Error');
+    setDubSub('Could not load the speech model.');
     showAudioNotice(
       `Speech model could not load: ${error.message}. ` +
       'The first run needs internet access to download it.'
@@ -539,7 +564,8 @@ async function startListening() {
   console.log('[Renderer] Starting listening...');
   if (ui.startButton) ui.startButton.disabled = true;
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = true;
-  setStatus('Listening');
+  setStatus('Dubbing live');
+  setDubSub('Translating and speaking as they talk.');
   setPlaceholder('Listening…');
   showAudioNotice('');
 
@@ -592,6 +618,7 @@ async function stopListening() {
   if (ui.stopButton) ui.stopButton.disabled = true;
   if (ui.sourceLanguageSelect) ui.sourceLanguageSelect.disabled = false;
   setStatus('Ready');
+  setDubSub('Stopped. Press Start dubbing to resume.');
   setMicActive(false);
 }
 
@@ -637,7 +664,8 @@ async function runFileTest(file) {
     );
 
     if (ui.levelRow) ui.levelRow.hidden = false;
-    setStatus(`Testing: ${info.name}`);
+    setStatus('Dubbing live');
+    setDubSub(`Dubbing your file: ${info.name}`);
     setPlaceholder('Listening to the file…');
     setMicActive(true);
 
@@ -667,6 +695,7 @@ async function finishFileTest(status) {
   if (ui.levelRow) ui.levelRow.hidden = true;
   setMicActive(false);
   setStatus(status);
+  setDubSub('Play a video, then press Start dubbing.');
 }
 
 function setTestingUi(testing) {
@@ -683,7 +712,8 @@ function setTestingUi(testing) {
 function updateSpeakButton() {
   if (!ui.speakButton) return;
   const on = appState.speakTranslation;
-  ui.speakButton.textContent = on ? 'Speak translation: On' : 'Speak translation: Off';
+  const label = ui.speakButton.querySelector('.toggle-label');
+  if (label) label.textContent = on ? 'Dub voice: On' : 'Dub voice: Off';
   ui.speakButton.classList.toggle('is-active', on);
   ui.speakButton.setAttribute('aria-pressed', String(on));
 }
@@ -922,6 +952,14 @@ async function init() {
   // Loaded up front rather than on first Start, so the download happens while
   // the user is still reading the UI instead of after they ask for captions.
   await prepareSpeechEngine();
+
+  // Voice is on by default, so if the OS has no voice for the target language
+  // the dub would come out garbled. By now the model has loaded, which means
+  // speechSynthesis voices have populated too — a reliable moment to check.
+  // Skipped if a more important notice (model error, macOS loopback) is up.
+  if (appState.modelReady && ui.audioNotice?.hidden) {
+    warnIfNoVoice();
+  }
 }
 
 init().catch(console.error);

@@ -21,14 +21,12 @@
                object-src 'none';
                base-uri 'none'"
     />
-    <title>VoxBridge VoiceLayer</title>
+    <title>VoxBridge — Live Dub</title>
     <link rel="stylesheet" href="/src/renderer/styles.css" />
   </head>
   <body>
     <main id="overlayRoot" class="overlay-shell is-expanded">
-      <!-- Top floating control bar removed as per request -->
-
-      <section class="assistant-workspace" aria-label="VoxBridge VoiceLayer assistant">
+      <section class="assistant-workspace" aria-label="VoxBridge live dubbing">
         <button id="compactPill" class="compact-pill" type="button" aria-label="Expand VoxBridge">
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="pill-copy">
@@ -39,50 +37,70 @@
         </button>
 
         <div class="workspace-panel">
-<aside class="assistant-sidebar">
-          <div class="brand-lockup">
-            <span class="brand-mark large" aria-hidden="true"></span>
-            <div>
-              <p class="eyebrow">VoxBridge</p>
-              <h1>VoiceLayer</h1>
+          <aside class="assistant-sidebar">
+            <div class="brand-lockup">
+              <span class="brand-mark large" aria-hidden="true"></span>
+              <div>
+                <p class="eyebrow">VoxBridge</p>
+                <h1>Live Dub</h1>
+              </div>
             </div>
-          </div>
 
-          <div class="sidebar-status">
-            <span class="status-dot" id="statusDot"></span>
-            <span id="statusText">Idle</span>
-            <span class="status-sep">·</span>
-            <span id="modelText">Not loaded</span>
-          </div>
-
-          <div class="sidebar-divider"></div>
-
-          <div class="sidebar-actions">
-            <button id="startButton" class="sidebar-btn primary-btn" type="button">Start Listening</button>
-            <button id="stopButton" class="sidebar-btn secondary-btn" type="button" disabled>Stop</button>
-            <button id="testFileButton" class="sidebar-btn secondary-btn" type="button">Test with a file</button>
-            <button id="speakButton" class="sidebar-btn secondary-btn" type="button" aria-pressed="false" title="Speak the translation aloud">Speak translation: Off</button>
-            <button id="clearButton" class="sidebar-btn ghost-btn" type="button">Clear All</button>
-            <input id="testFileInput" type="file" accept="audio/*,video/*" hidden />
-          </div>
-
-          <div class="sidebar-divider"></div>
-
-          <div class="caption-size" aria-label="Caption text size">
-            <span class="caption-size-label">Caption size</span>
-            <div class="caption-size-controls">
-              <button id="captionSmaller" class="icon-button" type="button" aria-label="Smaller captions">A-</button>
-              <span id="captionScaleValue">100%</span>
-              <button id="captionLarger" class="icon-button" type="button" aria-label="Larger captions">A+</button>
+            <div class="sidebar-status">
+              <span class="status-dot" id="statusDot"></span>
+              <span id="statusText">Idle</span>
+              <span class="status-sep">·</span>
+              <span id="modelText">Not loaded</span>
             </div>
-          </div>
-        </aside>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="sidebar-actions">
+              <button id="startButton" class="sidebar-btn primary-btn" type="button">Start dubbing</button>
+              <button id="stopButton" class="sidebar-btn secondary-btn" type="button" disabled>Stop</button>
+              <button id="testFileButton" class="sidebar-btn secondary-btn" type="button">Test with a file</button>
+              <input id="testFileInput" type="file" accept="audio/*,video/*" hidden />
+              <button
+                id="speakButton"
+                class="sidebar-btn toggle-btn is-active"
+                type="button"
+                aria-pressed="true"
+                title="Speak the translation aloud"
+              >
+                <span class="toggle-dot" aria-hidden="true"></span>
+                <span class="toggle-label">Dub voice: On</span>
+              </button>
+              <button id="clearButton" class="sidebar-btn ghost-btn" type="button">Clear</button>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="caption-size" aria-label="Caption text size">
+              <span class="caption-size-label">Caption size</span>
+              <div class="caption-size-controls">
+                <button id="captionSmaller" class="icon-button" type="button" aria-label="Smaller captions">A-</button>
+                <span id="captionScaleValue">100%</span>
+                <button id="captionLarger" class="icon-button" type="button" aria-label="Larger captions">A+</button>
+              </div>
+            </div>
+          </aside>
 
           <section class="workspace-main">
-            <header class="top-control-bar">
-              <div class="language-controls" aria-label="Language settings">
-                <label class="select-field" for="sourceLanguageSelect">
-                  <span>From</span>
+            <!-- Dub console: the hero. It carries the live state and the
+                 language flow, so at a glance you know what VoxBridge is doing
+                 and in which direction it is dubbing. -->
+            <header class="dub-console">
+              <div class="dub-live" id="dubHero">
+                <span class="dub-orb" aria-hidden="true"></span>
+                <div class="dub-live-copy">
+                  <p class="dub-state" id="dubState">Ready to dub</p>
+                  <p class="dub-sub" id="dubSub">Play a video, then press Start dubbing.</p>
+                </div>
+              </div>
+
+              <div class="dub-flow" aria-label="Dub languages">
+                <label class="flow-field" for="sourceLanguageSelect">
+                  <span>Hearing</span>
                   <select id="sourceLanguageSelect">
                     <option value="auto" selected>Auto-detect</option>
                     <option value="en">English</option>
@@ -93,8 +111,10 @@
                   </select>
                 </label>
 
-                <label class="select-field" for="targetLanguageSelect">
-                  <span>To</span>
+                <span class="flow-arrow" aria-hidden="true">→</span>
+
+                <label class="flow-field flow-to" for="targetLanguageSelect">
+                  <span>Dubbing to</span>
                   <select id="targetLanguageSelect">
                     <option value="hi" selected>Hindi</option>
                     <option value="en">English</option>
@@ -105,12 +125,12 @@
                 </label>
               </div>
 
-                <div class="window-controls">
-                  <button id="expandToggle" class="icon-button is-active" type="button">Full</button>
-                  <button id="compactToggle" class="icon-button" type="button">Mini</button>
-                  <button id="hideButton" class="icon-button" type="button" title="Hide overlay (Esc)">Hide</button>
-                  <button id="quitButton" class="icon-button danger" type="button" title="Quit VoxBridge (Ctrl+Shift+Q)">Quit</button>
-                </div>
+              <div class="window-controls">
+                <button id="expandToggle" class="icon-button is-active" type="button">Full</button>
+                <button id="compactToggle" class="icon-button" type="button">Mini</button>
+                <button id="hideButton" class="icon-button" type="button" title="Hide overlay (Esc)">Hide</button>
+                <button id="quitButton" class="icon-button danger" type="button" title="Quit VoxBridge (Ctrl+Shift+Q)">Quit</button>
+              </div>
             </header>
 
             <!-- Shown when the platform cannot capture system audio directly. -->
@@ -126,8 +146,8 @@
               <span class="level-value" id="levelValue">silent</span>
             </div>
 
-            <!-- Continuous caption ribbon: settled lines flow upward and the
-                 line currently being spoken stays at the bottom. -->
+            <!-- Subtitle ribbon: settled lines flow upward and the line
+                 currently being spoken stays at the bottom. -->
             <section class="caption-stage" aria-label="Live captions">
               <div class="caption-scroll" id="captionScroll">
                 <div class="caption-stream" id="captionStream" aria-live="polite"></div>
