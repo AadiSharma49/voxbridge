@@ -9,11 +9,16 @@
  * the app from starting.
  */
 
-const STORAGE_KEY = 'voxbridge.settings.v1';
+// Bumped to v2 when the defaults changed (English target + voice on by
+// default). Bumping resets stored preferences to the new defaults, which is
+// what makes those defaults reach people who already ran an earlier build.
+const STORAGE_KEY = 'voxbridge.settings.v2';
 
 export const DEFAULT_SETTINGS = {
   sourceLanguage: 'auto',
-  targetLanguage: 'hi',
+  // English by default: it is the one voice every OS ships with, so the spoken
+  // dub works out of the box. Other targets need their voice installed first.
+  targetLanguage: 'en',
   captionScale: 1,
   speakTranslation: true
 };

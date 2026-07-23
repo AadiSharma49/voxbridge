@@ -17,11 +17,6 @@ import { loadSettings, saveSettings } from '/src/modules/settings/settings.js';
 import { FileCaptionSource } from '/src/modules/audio/fileCaptionSource.js';
 import { VoiceOutput } from '/src/modules/audio/voiceOutput.js';
 
-// ============ CONSTANTS ============
-
-const DEFAULT_SOURCE_LANGUAGE = 'auto';
-const DEFAULT_TARGET_LANGUAGE = 'hi';
-
 // ============ LANGUAGE CONFIGURATION ============
 
 const LANGUAGES = {
@@ -421,7 +416,7 @@ async function prepareSpeechEngine() {
     appState.modelReady = true;
     setModelStatus('Whisper ready');
     setStatus('Ready');
-    setDubSub('Play a video, then press Start dubbing.');
+    setDubSub('Play in VLC, a browser, any player — then Start dubbing.');
     if (ui.startButton) ui.startButton.disabled = false;
   } catch (error) {
     console.error('[Renderer] Speech engine failed to load:', error);

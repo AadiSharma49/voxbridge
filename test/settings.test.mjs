@@ -23,7 +23,7 @@ const { loadSettings, saveSettings, DEFAULT_SETTINGS } = await import(
   '../src/modules/settings/settings.js'
 );
 
-const KEY = 'voxbridge.settings.v1';
+const KEY = 'voxbridge.settings.v2';
 
 function reset() {
   globalThis.localStorage = new MemoryStorage();
