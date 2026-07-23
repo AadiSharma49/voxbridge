@@ -14,6 +14,7 @@ import { AudioCapture } from '/src/modules/audio/audioCapture.js';
 import { translationService } from '/src/core/TranslationService.js';
 import { WhisperEngine } from '/src/core/WhisperEngine.js';
 import { loadSettings, saveSettings } from '/src/modules/settings/settings.js';
+import { FileCaptionSource } from '/src/modules/audio/fileCaptionSource.js';
 
 // ============ CONSTANTS ============
 
@@ -52,6 +53,8 @@ const ui = {
   stopButton: document.getElementById('stopButton'),
   clearButton: document.getElementById('clearButton'),
   copyButton: document.getElementById('copyButton'),
+  testFileButton: document.getElementById('testFileButton'),
+  testFileInput: document.getElementById('testFileInput'),
   captionSmaller: document.getElementById('captionSmaller'),
   captionLarger: document.getElementById('captionLarger'),
   captionScaleValue: document.getElementById('captionScaleValue'),
@@ -85,7 +88,9 @@ const appState = {
   audioSource: settings.audioSource,
   captionScale: settings.captionScale,
   audioCapabilities: null,
+  isTesting: false,
   audioCapture: new AudioCapture(),
+  fileSource: new FileCaptionSource(),
   speechEngine: new WhisperEngine({
     // 'auto' lets Whisper detect the spoken language, which is the point when
     // you do not know what the other person speaks. The From selector narrows
@@ -645,6 +650,81 @@ async function toggleListening() {
   }
 }
 
+// ============ FILE TEST MODE ============
+//
+// Play a file aloud AND caption it through the real pipeline, so the app can
+// be tested without any system-audio routing.
+
+async function runFileTest(file) {
+  if (appState.isTesting) return;
+
+  if (!appState.modelReady) {
+    showAudioNotice('Speech model is still loading. Give it a moment, then try the file again.');
+    return;
+  }
+
+  // A running live capture would fight the file for the pipeline.
+  if (appState.isListening) {
+    await stopListening();
+  }
+
+  appState.isTesting = true;
+  setTestingUi(true);
+  setStatus('Loading file…');
+  setPlaceholder('Decoding audio…');
+  showAudioNotice('');
+
+  try {
+    const info = await appState.fileSource.load(file);
+    console.log('[Renderer] File loaded for test', info);
+
+    await appState.speechEngine.start(
+      handlePartialTranscript,
+      (text) => { handleFinalTranscript(text).catch(console.error); }
+    );
+
+    if (ui.levelRow) ui.levelRow.hidden = false;
+    setStatus(`Testing: ${info.name}`);
+    setPlaceholder('Listening to the file…');
+    setMicActive(true);
+
+    await appState.fileSource.start(
+      (frame) => appState.speechEngine.processAudio(frame),
+      {
+        onLevel: updateLevelMeter,
+        onEnded: () => { finishFileTest('Test finished'); }
+      }
+    );
+  } catch (error) {
+    console.error('[Renderer] File test failed:', error);
+    showAudioNotice(error.message);
+    await finishFileTest('Ready');
+  }
+}
+
+async function finishFileTest(status) {
+  if (!appState.isTesting) return;
+
+  await appState.fileSource.stop().catch(() => {});
+  await appState.speechEngine.stop().catch(() => {}); // flush the last line
+
+  appState.isTesting = false;
+  setTestingUi(false);
+  if (ui.levelRow) ui.levelRow.hidden = true;
+  setMicActive(false);
+  setStatus(status);
+}
+
+function setTestingUi(testing) {
+  if (ui.testFileButton) {
+    ui.testFileButton.textContent = testing ? 'Stop test' : 'Test with a file';
+    ui.testFileButton.classList.toggle('is-active', testing);
+  }
+  // Live controls make no sense mid-test.
+  if (ui.startButton) ui.startButton.disabled = testing || appState.isMuted;
+  if (ui.audioSourceSelect) ui.audioSourceSelect.disabled = testing;
+}
+
 async function toggleMute() {
   appState.isMuted = !appState.isMuted;
   if (ui.muteButton) {
@@ -743,6 +823,19 @@ ui.stopButton?.addEventListener('click', () => stopListening().catch(console.err
 ui.muteButton?.addEventListener('click', () => toggleMute().catch(console.error));
 ui.clearButton?.addEventListener('click', clearHistory);
 ui.copyButton?.addEventListener('click', () => copyTranscript().catch(console.error));
+
+ui.testFileButton?.addEventListener('click', () => {
+  if (appState.isTesting) {
+    finishFileTest('Ready').catch(console.error);
+  } else {
+    ui.testFileInput?.click();
+  }
+});
+ui.testFileInput?.addEventListener('change', (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = ''; // allow re-selecting the same file later
+  if (file) runFileTest(file).catch(console.error);
+});
 ui.captionSmaller?.addEventListener('click', () => applyCaptionScale(appState.captionScale - 0.15));
 ui.captionLarger?.addEventListener('click', () => applyCaptionScale(appState.captionScale + 0.15));
 ui.hideButton?.addEventListener('click', hideOverlay);
