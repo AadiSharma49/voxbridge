@@ -53,7 +53,6 @@ const ui = {
   startButton: document.getElementById('startButton'),
   stopButton: document.getElementById('stopButton'),
   clearButton: document.getElementById('clearButton'),
-  copyButton: document.getElementById('copyButton'),
   testFileButton: document.getElementById('testFileButton'),
   testFileInput: document.getElementById('testFileInput'),
   speakButton: document.getElementById('speakButton'),
@@ -260,48 +259,6 @@ function clearCaptions() {
   followTail = true;
   updateFollowButton();
   setPlaceholder('Waiting for speech…');
-}
-
-/**
- * Copies the session as plain text. Without this a conversation is lost the
- * moment the window closes, which makes the app useless for the obvious
- * follow-on job of writing up what was said.
- */
-async function copyTranscript() {
-  const lines = [...ui.captionStream.querySelectorAll('.caption-line')]
-    .filter((line) => !line.classList.contains('is-partial'))
-    .map((line) => {
-      const primary = line.querySelector('.caption-primary')?.textContent?.trim() || '';
-      const secondary = line.querySelector('.caption-secondary');
-      const original = secondary?.hidden ? '' : secondary?.textContent?.trim() || '';
-      return original ? `${primary}\n  (${original})` : primary;
-    })
-    .filter(Boolean);
-
-  if (!lines.length) {
-    flashButton(ui.copyButton, 'Nothing yet');
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(lines.join('\n\n'));
-    flashButton(ui.copyButton, `Copied ${lines.length} lines`);
-  } catch (error) {
-    console.error('[Renderer] Copy failed:', error);
-    flashButton(ui.copyButton, 'Copy failed');
-  }
-}
-
-/** Momentary button feedback; a silent copy leaves the user unsure it worked. */
-function flashButton(button, message) {
-  if (!button) return;
-  const original = button.dataset.label || button.textContent;
-  button.dataset.label = original;
-  button.textContent = message;
-  clearTimeout(button.__flashTimer);
-  button.__flashTimer = setTimeout(() => {
-    button.textContent = button.dataset.label;
-  }, 1600);
 }
 
 function updateFollowButton() {
@@ -837,7 +794,6 @@ document.addEventListener('keydown', (e) => {
 ui.startButton?.addEventListener('click', () => startListening().catch(console.error));
 ui.stopButton?.addEventListener('click', () => stopListening().catch(console.error));
 ui.clearButton?.addEventListener('click', clearHistory);
-ui.copyButton?.addEventListener('click', () => copyTranscript().catch(console.error));
 
 ui.testFileButton?.addEventListener('click', () => {
   if (appState.isTesting) {
