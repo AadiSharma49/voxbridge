@@ -13,6 +13,11 @@ assets/models/*.zip
 # Built from node_modules by scripts/build-vendor.js
 src/vendor/
 
+# Voice/ML models downloaded locally (XTTS ~1.8GB, etc.) - never committed
+models/
+experiments/**/out/
+experiments/**/*.wav
+
 # Local overrides
 .env
 .env.local
