@@ -19,6 +19,7 @@ export class FileCaptionSource {
   constructor() {
     this.playbackContext = null;
     this.sourceNode = null;
+    this.gainNode = null;
     this.decoded = null;
     this.frames = [];
     this.frameIndex = 0;
@@ -98,12 +99,16 @@ export class FileCaptionSource {
     this.onLevel = handlers.onLevel || null;
     this.onEnded = handlers.onEnded || null;
 
-    // Play so the user hears the clip.
+    // Play so the user hears the clip. Routed through a gain node so the
+    // original can be ducked while the spoken translation talks over it —
+    // which is what makes the file test feel like a real dub.
     this.playbackContext = new AudioContext();
     await this.playbackContext.resume();
     this.sourceNode = this.playbackContext.createBufferSource();
     this.sourceNode.buffer = this.decoded;
-    this.sourceNode.connect(this.playbackContext.destination);
+    this.gainNode = this.playbackContext.createGain();
+    this.sourceNode.connect(this.gainNode);
+    this.gainNode.connect(this.playbackContext.destination);
 
     this.frameIndex = 0;
     this.rafActive = true;
@@ -135,6 +140,20 @@ export class FileCaptionSource {
     requestAnimationFrame(() => this.#pump());
   }
 
+  /**
+   * Sets the original clip's volume (0–1) with a short ramp to avoid clicks.
+   * Used to duck the source while the translated voice speaks over it.
+   */
+  setVolume(value) {
+    if (!this.gainNode || !this.playbackContext) return;
+    const clamped = Math.min(1, Math.max(0, value));
+    this.gainNode.gain.setTargetAtTime(
+      clamped,
+      this.playbackContext.currentTime,
+      0.05
+    );
+  }
+
   #finish() {
     this.rafActive = false;
     const done = this.onEnded;
@@ -149,6 +168,10 @@ export class FileCaptionSource {
       try { this.sourceNode.stop(); } catch { /* already stopped */ }
       this.sourceNode.disconnect();
       this.sourceNode = null;
+    }
+    if (this.gainNode) {
+      this.gainNode.disconnect();
+      this.gainNode = null;
     }
     if (this.playbackContext) {
       await this.playbackContext.close();

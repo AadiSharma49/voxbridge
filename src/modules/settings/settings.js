@@ -16,7 +16,8 @@ export const DEFAULT_SETTINGS = {
   targetLanguage: 'hi',
   audioSource: 'system',
   captionScale: 1,
-  autoStart: false
+  autoStart: false,
+  speakTranslation: false
 };
 
 /** Guards against a stored value that is no longer valid in this build. */
@@ -25,7 +26,8 @@ const VALIDATORS = {
   targetLanguage: (v) => typeof v === 'string' && v.length > 0 && v.length <= 8,
   audioSource: (v) => v === 'system' || v === 'mic',
   captionScale: (v) => typeof v === 'number' && v >= 0.75 && v <= 2,
-  autoStart: (v) => typeof v === 'boolean'
+  autoStart: (v) => typeof v === 'boolean',
+  speakTranslation: (v) => typeof v === 'boolean'
 };
 
 export function loadSettings() {

@@ -15,6 +15,7 @@ import { translationService } from '/src/core/TranslationService.js';
 import { WhisperEngine } from '/src/core/WhisperEngine.js';
 import { loadSettings, saveSettings } from '/src/modules/settings/settings.js';
 import { FileCaptionSource } from '/src/modules/audio/fileCaptionSource.js';
+import { VoiceOutput } from '/src/modules/audio/voiceOutput.js';
 
 // ============ CONSTANTS ============
 
@@ -55,6 +56,7 @@ const ui = {
   copyButton: document.getElementById('copyButton'),
   testFileButton: document.getElementById('testFileButton'),
   testFileInput: document.getElementById('testFileInput'),
+  speakButton: document.getElementById('speakButton'),
   captionSmaller: document.getElementById('captionSmaller'),
   captionLarger: document.getElementById('captionLarger'),
   captionScaleValue: document.getElementById('captionScaleValue'),
@@ -89,8 +91,13 @@ const appState = {
   captionScale: settings.captionScale,
   audioCapabilities: null,
   isTesting: false,
+  speakTranslation: settings.speakTranslation,
   audioCapture: new AudioCapture(),
   fileSource: new FileCaptionSource(),
+  voiceOutput: new VoiceOutput({
+    enabled: settings.speakTranslation,
+    lang: settings.targetLanguage
+  }),
   speechEngine: new WhisperEngine({
     // 'auto' lets Whisper detect the spoken language, which is the point when
     // you do not know what the other person speaks. The From selector narrows
@@ -323,7 +330,8 @@ function persistSettings() {
     sourceLanguage: appState.sourceLanguage,
     targetLanguage: appState.targetLanguage,
     audioSource: appState.audioSource,
-    captionScale: appState.captionScale
+    captionScale: appState.captionScale,
+    speakTranslation: appState.speakTranslation
   });
 }
 
@@ -338,7 +346,10 @@ function handleSourceLanguageChange() {
 
 function handleTargetLanguageChange() {
   appState.targetLanguage = ui.targetLanguageSelect.value;
+  // The spoken voice must follow the language the captions translate into.
+  appState.voiceOutput.setLang(appState.targetLanguage);
   updateLanguageLabels();
+  warnIfNoVoice();
   persistSettings();
   console.log('[Renderer] Target language changed to:', appState.targetLanguage);
 }
@@ -549,6 +560,15 @@ async function handleFinalTranscript(originalText) {
     );
 
     applyTranslation(line, normalizedText, translatedText);
+
+    // Speak the line in the target language so the user hears the translation,
+    // not just reads it. Falls back to the original if translation was a no-op
+    // (same source/target language).
+    const spoken =
+      translatedText && translatedText !== normalizedText
+        ? translatedText
+        : normalizedText;
+    appState.voiceOutput.speak(spoken);
   } catch (error) {
     console.error('[Renderer] Failed to translate transcript:', error);
   }
@@ -627,6 +647,7 @@ async function stopListening() {
   }
 
   console.log('[Renderer] Stopping listening...');
+  appState.voiceOutput.cancel(); // drop any queued speech
   await appState.audioCapture.stop();
   await appState.speechEngine.stop();
 
@@ -705,6 +726,7 @@ async function runFileTest(file) {
 async function finishFileTest(status) {
   if (!appState.isTesting) return;
 
+  appState.voiceOutput.cancel(); // drop any queued speech
   await appState.fileSource.stop().catch(() => {});
   await appState.speechEngine.stop().catch(() => {}); // flush the last line
 
@@ -743,6 +765,49 @@ async function toggleMute() {
     setPlaceholder('Ready to listen.');
   }
   setMicActive(appState.isListening);
+}
+
+// ============ SPOKEN VOICE ============
+
+function updateSpeakButton() {
+  if (!ui.speakButton) return;
+  const on = appState.speakTranslation;
+  ui.speakButton.textContent = on ? 'Speak translation: On' : 'Speak translation: Off';
+  ui.speakButton.classList.toggle('is-active', on);
+  ui.speakButton.setAttribute('aria-pressed', String(on));
+}
+
+/**
+ * Speaking only works if the OS has a voice for the target language. Warn
+ * instead of quietly emitting garbled sound (common for Hindi on a fresh
+ * Windows install, where the voice must be added by hand).
+ */
+function warnIfNoVoice() {
+  if (!appState.speakTranslation) return;
+
+  const voice = appState.voiceOutput;
+  if (!voice.isSupported) {
+    showAudioNotice('This build cannot speak audio: no speech synthesis is available.');
+    return;
+  }
+  if (!voice.hasVoiceFor(appState.targetLanguage)) {
+    const label = getLanguageLabel(appState.targetLanguage);
+    showAudioNotice(
+      `No ${label} voice is installed, so the spoken translation may sound wrong. ` +
+      'On Windows, add one under Settings › Time & Language › Speech › Manage voices.'
+    );
+  } else {
+    showAudioNotice('');
+  }
+}
+
+function toggleSpeak() {
+  appState.speakTranslation = !appState.speakTranslation;
+  appState.voiceOutput.setEnabled(appState.speakTranslation);
+  updateSpeakButton();
+  warnIfNoVoice();
+  persistSettings();
+  console.log('[Renderer] Speak translation:', appState.speakTranslation);
 }
 
 function clearHistory() {
@@ -836,6 +901,7 @@ ui.testFileInput?.addEventListener('change', (event) => {
   event.target.value = ''; // allow re-selecting the same file later
   if (file) runFileTest(file).catch(console.error);
 });
+ui.speakButton?.addEventListener('click', toggleSpeak);
 ui.captionSmaller?.addEventListener('click', () => applyCaptionScale(appState.captionScale - 0.15));
 ui.captionLarger?.addEventListener('click', () => applyCaptionScale(appState.captionScale + 0.15));
 ui.hideButton?.addEventListener('click', hideOverlay);
@@ -897,6 +963,7 @@ window.desktopApp.onOverlayShortcut((command) => {
 });
 
 window.addEventListener('beforeunload', () => {
+  appState.voiceOutput.cancel();
   appState.audioCapture.stop().catch(console.error);
   appState.speechEngine.destroy().catch(console.error);
 });
@@ -912,6 +979,16 @@ async function init() {
   if (ui.targetLanguageSelect) ui.targetLanguageSelect.value = appState.targetLanguage;
   if (ui.audioSourceSelect) ui.audioSourceSelect.value = appState.audioSource;
   applyCaptionScale(appState.captionScale);
+  updateSpeakButton();
+
+  // While the dub is speaking, duck the original clip so the translation is
+  // audible over it. Only meaningful in file-test mode, where we own playback;
+  // for live system audio we cannot lower another app's volume.
+  appState.voiceOutput.onSpeakingChange = (speaking) => {
+    if (appState.isTesting) {
+      appState.fileSource.setVolume(speaking ? 0.18 : 1);
+    }
+  };
 
   updateLanguageLabels();
   updateFollowButton();
